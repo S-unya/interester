@@ -13,8 +13,12 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.44",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2"
+    "@tauri-apps/plugin-opener": "^2",
+    "ai": "^5.0.93",
+    "bits-ui": "^2.14.3",
+    "clsx": "^2.1.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.5",
