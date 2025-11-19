@@ -1,0 +1,5 @@
+{
+  "defaultContentTypes": ["news", "articles"],
+  "maxResultsPerSearch": 10,
+  "enableNotifications": false
+}
