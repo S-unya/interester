@@ -9,7 +9,7 @@ A personalized content monitoring system that allows users to register interests
 **Core Value Proposition**:
 
 - **Intelligent Search**: Goes beyond simple keyword matching to find relevant content across the web.
-- **AI Curation**: Uses LLMs (Anthropic Claude) to summarize and format content into digestible insights.
+- **AI Curation**: Uses LLMs (Google Gemini via Vercel AI SDK) to summarize and format content into digestible insights.
 - **Flexible Monitoring**: Track specific terms, broad topics, or specific URLs.
 - **Privacy-Focused**: Local-first architecture keeps your data on your machine.
 
@@ -32,7 +32,8 @@ The project is currently in the **MVP (Minimum Viable Product)** phase, operatin
 - **Frontend**: SvelteKit (Svelte 5) + Tailwind CSS / Vanilla CSS
 - **Backend Logic**: Node.js (running within the Tauri context)
 - **Desktop Framework**: Tauri v2
-- **AI/LLM**: Vercel AI SDK (`ai`, `@ai-sdk/anthropic`)
+- **AI/LLM**: Vercel AI SDK (`ai`, `@ai-sdk/google`) using Google Gemini
+- **Search**: Serper API
 - **Storage**: Local JSON files via Tauri file system APIs
 
 ---
@@ -43,7 +44,8 @@ The project is currently in the **MVP (Minimum Viable Product)** phase, operatin
 
 - Node.js (v18+)
 - Rust (for Tauri)
-- Anthropic API Key
+- Google Gemini API Key
+- Serper API Key
 
 ### Installation
 
@@ -64,7 +66,8 @@ The project is currently in the **MVP (Minimum Viable Product)** phase, operatin
     Create a `.env` file in the `interester` directory:
 
     ```env
-    ANTHROPIC_API_KEY=your_api_key_here
+    GEMINI_KEY=your_gemini_api_key_here
+    SERPER_KEY=your_serper_api_key_here
     ```
 
 4. **Run the development server**
