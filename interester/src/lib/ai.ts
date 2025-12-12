@@ -4,8 +4,7 @@ import { generateText } from "ai";
 // TODO: eventually we want to allow users to select models and supply their own API keys.
 // Read API keys from environment variables.
 // These are expected to be defined in the `.env` file in the `interester` directory.
-const GEMINI_KEY = process.env.GEMINI_KEY;
-const SERPER_KEY = process.env.SERPER_KEY;
+import { GEMINI_KEY, SERPER_KEY } from "$env/static/private";
 
 if (!GEMINI_KEY) {
 	console.warn(

@@ -15,7 +15,6 @@ export interface Interest {
 	description?: string;
 	searchTerms: string[];
 	monitorUrls?: string[];
-	contentTypes: ContentType[];
 	active: boolean;
 	createdAt: string;
 	updatedAt: string;
@@ -67,11 +66,11 @@ export interface SearchExecution {
 export interface UserPreferences {
 	notificationEmail?: string;
 	notificationFrequency?:
-		| "immediate"
-		| "daily"
-		| "weekly"
-		| "monthly"
-		| "yearly";
+	| "immediate"
+	| "daily"
+	| "weekly"
+	| "monthly"
+	| "yearly";
 	defaultContentTypes: ContentType[];
 	maxResultsPerSearch: number;
 	enableNotifications: boolean;
@@ -89,7 +88,6 @@ export interface InterestCreateInput {
 	description?: string;
 	searchTerms: string[];
 	monitorUrls?: string[];
-	contentTypes: ContentType[];
 }
 
 export interface InterestUpdateInput extends Partial<InterestCreateInput> {

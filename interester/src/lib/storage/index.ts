@@ -10,7 +10,8 @@ export {
 	type StorageConfig,
 } from "./adapter";
 
-export { JsonFetchAdapter, JsonFsAdapter, TauriStoreAdapter } from "./adapters";
+export { JsonFetchAdapter } from "./adapters/json-fetch";
+export { TauriStoreAdapter } from "./adapters/tauri-store";
 
 export { InterestStorage } from "./interests";
 export { PreferencesStorage } from "./preferences";

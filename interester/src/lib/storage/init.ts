@@ -3,12 +3,9 @@
  * Detects the environment and configures the appropriate storage adapter
  */
 
-import {
-	JsonFetchAdapter,
-	JsonFsAdapter,
-	TauriStoreAdapter,
-	configureStorage,
-} from "./index";
+import { configureStorage } from "./adapter";
+import { JsonFetchAdapter } from "./adapters/json-fetch";
+import { TauriStoreAdapter } from "./adapters/tauri-store";
 
 let initialized = false;
 
@@ -39,18 +36,22 @@ export async function initializeStorage(): Promise<void> {
 	}
 
 	try {
-		if (isTauriEnvironment()) {
-			console.log("Initializing Tauri store adapter...");
-			const adapter = new TauriStoreAdapter();
-			configureStorage(adapter);
-		} else if (isBrowser()) {
-			console.log("Initializing JSON fetch adapter (browser)...");
-			const adapter = new JsonFetchAdapter();
+		if (import.meta.env.SSR) {
+			console.log("Initializing JSON filesystem adapter (server)...");
+			const { JsonFsAdapter } = await import("./adapters/json-fs");
+			const adapter = new JsonFsAdapter("data");
 			configureStorage(adapter);
 		} else {
-			console.log("Initializing JSON filesystem adapter (server)...");
-			const adapter = new JsonFsAdapter();
-			configureStorage(adapter);
+			// Client side (Browser or Tauri)
+			if (isTauriEnvironment()) {
+				console.log("Initializing Tauri store adapter...");
+				const adapter = new TauriStoreAdapter();
+				configureStorage(adapter);
+			} else {
+				console.log("Initializing JSON fetch adapter (browser)...");
+				const adapter = new JsonFetchAdapter();
+				configureStorage(adapter);
+			}
 		}
 
 		initialized = true;

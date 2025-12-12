@@ -47,6 +47,15 @@ export const GET: RequestHandler = async ({ params }) => {
 
 // PUT /api/interests/[id] - Update an interest
 export const PUT: RequestHandler = async ({ params, request }) => {
+	if (!params.id) {
+		return json(
+			{
+				success: false,
+				error: "Interest ID is required",
+			} satisfies ApiResponse<Interest>,
+			{ status: 400 },
+		);
+	}
 	try {
 		await initializeStorage();
 		const body: InterestUpdateInput = await request.json();
