@@ -1,12 +1,23 @@
 <script lang="ts">
-  import { page } from '$app/stores';
-  
+  import { page } from "$app/stores";
+
+  import { onMount } from "svelte";
+  import { startScheduler } from "$lib/scheduler";
+
   const navItems = [
-    { href: '/', label: 'Dashboard', icon: '🏠' },
-    { href: '/interests', label: 'Interests', icon: '⭐' },
-    { href: '/results', label: 'Results', icon: '📊' },
-    { href: '/settings', label: 'Settings', icon: '⚙️' }
+    { href: "/", label: "Dashboard", icon: "🏠" },
+    { href: "/interests", label: "Interests", icon: "⭐" },
+    { href: "/results", label: "Results", icon: "📊" },
+    { href: "/settings", label: "Settings", icon: "⚙️" },
   ];
+
+  onMount(() => {
+    // Start scheduler
+    const stopScheduler = startScheduler(); // checks every hour by default
+    return () => {
+      stopScheduler();
+    };
+  });
 </script>
 
 <div class="app-layout">
@@ -14,14 +25,14 @@
     <div class="logo">
       <h1>🔍 Interester</h1>
     </div>
-    
+
     <ul class="nav-items">
       {#each navItems as item}
         <li>
-          <a 
-            href={item.href} 
+          <a
+            href={item.href}
             class:active={$page.url.pathname === item.href}
-            aria-current={$page.url.pathname === item.href ? 'page' : undefined}
+            aria-current={$page.url.pathname === item.href ? "page" : undefined}
           >
             <span class="icon">{item.icon}</span>
             <span class="label">{item.label}</span>

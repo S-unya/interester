@@ -20,7 +20,8 @@ export interface Interest {
 	updatedAt: string;
 	// Phase 2 fields (for future use)
 	scheduleFrequency?: "hourly" | "daily" | "weekly" | "manual";
-	scheduleTime?: string;
+	scheduleTime?: string; // HH:MM for daily/weekly
+	lastRanAt?: string;
 }
 
 export interface SearchResult {
@@ -88,6 +89,8 @@ export interface InterestCreateInput {
 	description?: string;
 	searchTerms: string[];
 	monitorUrls?: string[];
+	scheduleFrequency?: "hourly" | "daily" | "weekly" | "manual";
+	scheduleTime?: string;
 }
 
 export interface InterestUpdateInput extends Partial<InterestCreateInput> {

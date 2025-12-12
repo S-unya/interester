@@ -13,6 +13,9 @@
     let formSearchTerms = $state("");
     let formMonitorUrls = $state("");
     let formContentTypes = $state<string[]>(["general"]);
+    let formScheduleFrequency = $state<
+        "hourly" | "daily" | "weekly" | "manual"
+    >("manual");
 
     async function loadInterests() {
         loading = true;
@@ -26,6 +29,24 @@
             console.error("Failed to load interests:", e);
         } finally {
             loading = false;
+        }
+    }
+
+    async function runInterest(id: string) {
+        if (!confirm("Run search now? This may take a moment.")) return;
+        try {
+            const response = await fetch(`/api/interests/${id}/run`, {
+                method: "POST",
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert("Search completed successfully!");
+            } else {
+                alert("Search failed: " + (result.error || "Unknown error"));
+            }
+        } catch (e) {
+            console.error("Failed to run interest:", e);
+            alert("Failed to run interest");
         }
     }
 
@@ -49,6 +70,7 @@
             description: formDescription || undefined,
             searchTerms,
             monitorUrls: monitorUrls.length > 0 ? monitorUrls : undefined,
+            scheduleFrequency: formScheduleFrequency,
         };
 
         try {
@@ -100,6 +122,7 @@
         formDescription = interest.description || "";
         formSearchTerms = interest.searchTerms.join(", ");
         formMonitorUrls = (interest.monitorUrls || []).join("\n");
+        formScheduleFrequency = interest.scheduleFrequency || "manual";
         showForm = true;
     }
 
@@ -109,6 +132,7 @@
         formDescription = "";
         formSearchTerms = "";
         formMonitorUrls = "";
+        formScheduleFrequency = "manual";
         showForm = false;
     }
 
@@ -189,6 +213,19 @@
                         ></textarea>
                     </div>
 
+                    <div class="form-group">
+                        <label for="schedule">Schedule Frequency</label>
+                        <select
+                            id="schedule"
+                            bind:value={formScheduleFrequency}
+                        >
+                            <option value="manual">Manual Only</option>
+                            <option value="hourly">Hourly</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                        </select>
+                    </div>
+
                     <div class="form-actions">
                         <button
                             type="button"
@@ -259,6 +296,17 @@
                                         </ul>
                                     </div>
                                 {/if}
+                                <div class="schedule-info">
+                                    <strong>Schedule:</strong>
+                                    {interest.scheduleFrequency || "manual"}
+                                    {#if interest.lastRanAt}
+                                        <span class="last-run"
+                                            >(Last run: {new Date(
+                                                interest.lastRanAt,
+                                            ).toLocaleString()})</span
+                                        >
+                                    {/if}
+                                </div>
                             </div>
                         </div>
 
@@ -268,6 +316,14 @@
                                 aria-label={`View ${interest.name}`}
                                 href={`/results/${interest.id}`}>👁️</a
                             >
+                            <button
+                                class="button-icon"
+                                onclick={() => runInterest(interest.id)}
+                                title="Run Search Now"
+                                aria-label={`Run ${index + 1}`}
+                            >
+                                ▶️
+                            </button>
                             <button
                                 class="button-icon"
                                 onclick={() => editInterest(interest)}
@@ -435,7 +491,8 @@
     }
 
     input[type="text"],
-    textarea {
+    textarea,
+    select {
         width: 100%;
         padding: 0.75rem;
         border: 1px solid #e0e0e0;
