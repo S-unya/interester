@@ -15,21 +15,26 @@ A personalized content monitoring system that allows users to register interests
 
 ---
 
-## Current Status: MVP (Phase 1)
+## Current Status: MVP (Phase 1+)
 
-The project is currently in the **MVP (Minimum Viable Product)** phase, operating as a local desktop application.
+The project has moved beyond the initial MVP, now featuring robust background monitoring and result management.
 
 ### Features Implemented
 
 - **Interest Management**: Create, update, and delete interests with search terms and specific URLs to monitor.
 - **Dashboard**: Visual overview of active interests and system status.
-- **Local Storage**: All data is stored locally in JSON files (`data/` directory).
-- **AI Integration**: Basic integration with Vercel AI SDK and Anthropic for content processing.
-- **Desktop App**: Wrapped as a native desktop application using Tauri.
+- **Automated Monitoring**: In-app scheduler triggers scans on hourly, daily, or weekly intervals (active while app is open).
+- **System Notifications**: Native desktop notifications when new results are found according to your interests.
+- **Result Management**: Detailed AI summaries with key points and sources, featuring read/unread status, archiving, and deletion.
+- **Result Notes**: Attach personal thoughts or findings to specific AI-curated results.
+- **Manual Trigger**: Ability to manually run any interest search at any time.
+- **Local Storage**: All data (interests, results, notes) is stored locally in JSON files (`data/` directory).
+- **AI Integration**: Integration with Vercel AI SDK using Google Gemini for intelligent content processing.
+- **Desktop App**: Native desktop application performance and integration via Tauri v2.
 
 ### Technology Stack
 
-- **Frontend**: SvelteKit (Svelte 5) + Tailwind CSS / Vanilla CSS
+- **Frontend**: SvelteKit (Svelte 5) + Vanilla CSS
 - **Backend Logic**: Node.js (running within the Tauri context)
 - **Desktop Framework**: Tauri v2
 - **AI/LLM**: Vercel AI SDK (`ai`, `@ai-sdk/google`) using Google Gemini
@@ -78,25 +83,50 @@ The project is currently in the **MVP (Minimum Viable Product)** phase, operatin
 
 ---
 
+## UX Overhaul Plan
+
+To transition from a "functional MVP" to a "power-user tool," the following UX improvements are planned:
+
+- **Dashboard Intelligence**:
+    - Add an "Activity Stream" showing recent hits across all interests.
+    - Integration of "System Health" (last scan time, API status).
+    - Quick-add input for new interests directly from the home screen.
+- **Visual Feedback & Polish**:
+    - Implementation of Skeleton Loaders for data-heavy views.
+    - Pulsing status indicators for active background tasks.
+    - Enhanced card states (hover interactions, transition animations).
+- **Result Interactivity**:
+    - "Pinning" important results to the top of an interest feed.
+    - Inline quick actions (Mark as read, Archive) without entering the detail view.
+    - Source rich previews (favicons and site meta-data).
+- **Onboarding Experience**:
+    - Pre-populated "Example Interests" for first-time users.
+    - Guided empty states with helpful tips for getting started.
+- **Ignore Rules (Noise Control)**:
+    - Dedicated UI for defining global and per-interest ignore patterns (domains, keywords).
+- **Dark Mode Support**:
+    - Native dark theme to match OS preferences.
+
+---
+
 ## Roadmap
 
-### Phase 1: MVP Polish (Current)
+### Phase 1: MVP Polish (Completed)
 
 - [x] Basic CRUD for Interests
 - [x] Local JSON Storage
 - [x] Tauri App Shell
-- [ ] Refine AI summarization prompts
-- [ ] Improve search result parsing
-- [ ] Add manual "Run Search" trigger
+- [x] Manual "Run Search" trigger
+- [x] Scheduling & Notifications
+- [x] Result Management & Notes
 
-### Phase 2: Enhanced Capabilities
+### Phase 2: UX & System Polish (Upcoming)
 
-- **Scheduling**: Automated background searches (hourly, daily).
-- **Notifications**: System notifications for new summaries.
-- **Better UI**: Enhanced result visualization and history.
-- **Result ignore rules**: Ability to define ignore instructions per interest and/or per result (for example domains, patterns, or sources to skip).
-- **Result notes**: Allow users to attach notes to individual results, stored separately from the raw result data but linked and displayed alongside the related result.
-- **Result management**: Mark results as read or unread, delete or archive individual results, configure automatic deletion after a chosen period, and prepare for future result filtering.
+- [ ] Implement **UX Overhaul Plan** (see section above)
+- [ ] **True Background Support**: Migrate scheduling to Rust/Tauri to enable scans even when the app is closed.
+- [ ] Refine AI summarization prompts for better consistency
+- [ ] Improve search result parsing for broader site compatibility
+- [ ] Build **Ignore Rules UI** for noise reduction
 
 ### Phase 3: Web & Cloud (Future)
 
