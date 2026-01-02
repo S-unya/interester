@@ -9,6 +9,28 @@ export type ContentType =
 	| "discussions"
 	| "general";
 
+/**
+ * Ignore rule used to hide or deprioritise certain results.
+ *
+ * These are typically attached to an Interest and interpreted when
+ * running searches or displaying results.
+ */
+export interface IgnoreRule {
+	id: string;
+	label: string;
+	reason?: string;
+	pattern: {
+		domains?: string[];
+		urlSubstrings?: string[];
+		titleIncludes?: string[];
+		sourceIncludes?: string[];
+	};
+	scope?: "interest" | "global" | "model-suggested";
+	active: boolean;
+	createdAt: string;
+	createdBy?: "user" | "system" | "model";
+}
+
 export interface Interest {
 	id: string;
 	name: string;
@@ -22,6 +44,10 @@ export interface Interest {
 	scheduleFrequency?: "hourly" | "daily" | "weekly" | "manual";
 	scheduleTime?: string; // HH:MM for daily/weekly
 	lastRanAt?: string;
+
+	// Result management
+	ignoreRules?: IgnoreRule[];
+	resultRetentionDays?: number;
 }
 
 export interface SearchResult {
@@ -52,6 +78,15 @@ export interface FormattedResult {
 		date?: string;
 	}[];
 	generatedAt: string;
+
+	// Lifecycle and ignore metadata (optional for backwards compatibility)
+	status?: "unread" | "read" | "archived";
+	readAt?: string;
+	archivedAt?: string;
+	ignored?: boolean;
+	ignoredAt?: string;
+	ignoredReason?: string;
+	ignoredByRuleId?: string;
 }
 
 export interface SearchExecution {
@@ -67,14 +102,31 @@ export interface SearchExecution {
 export interface UserPreferences {
 	notificationEmail?: string;
 	notificationFrequency?:
-	| "immediate"
-	| "daily"
-	| "weekly"
-	| "monthly"
-	| "yearly";
+		| "immediate"
+		| "daily"
+		| "weekly"
+		| "monthly"
+		| "yearly";
 	defaultContentTypes: ContentType[];
 	maxResultsPerSearch: number;
 	enableNotifications: boolean;
+
+	// Optional default retention for results, in days
+	defaultResultRetentionDays?: number;
+}
+
+/**
+ * User-authored note attached to a formatted result.
+ * Notes are stored in separate JSON files keyed by interest.
+ */
+export interface ResultNote {
+	id: string;
+	interestId: string;
+	resultId: string;
+	body: string;
+	pinned?: boolean;
+	createdAt: string;
+	updatedAt?: string;
 }
 
 // API Response types
