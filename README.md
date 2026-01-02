@@ -94,6 +94,9 @@ The project is currently in the **MVP (Minimum Viable Product)** phase, operatin
 - **Scheduling**: Automated background searches (hourly, daily).
 - **Notifications**: System notifications for new summaries.
 - **Better UI**: Enhanced result visualization and history.
+- **Result ignore rules**: Ability to define ignore instructions per interest and/or per result (for example domains, patterns, or sources to skip).
+- **Result notes**: Allow users to attach notes to individual results, stored separately from the raw result data but linked and displayed alongside the related result.
+- **Result management**: Mark results as read or unread, delete or archive individual results, configure automatic deletion after a chosen period, and prepare for future result filtering.
 
 ### Phase 3: Web & Cloud (Future)
 
