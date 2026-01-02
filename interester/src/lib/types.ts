@@ -87,6 +87,7 @@ export interface FormattedResult {
 	ignoredAt?: string;
 	ignoredReason?: string;
 	ignoredByRuleId?: string;
+	pinned?: boolean;
 }
 
 export interface SearchExecution {
@@ -102,11 +103,11 @@ export interface SearchExecution {
 export interface UserPreferences {
 	notificationEmail?: string;
 	notificationFrequency?:
-		| "immediate"
-		| "daily"
-		| "weekly"
-		| "monthly"
-		| "yearly";
+	| "immediate"
+	| "daily"
+	| "weekly"
+	| "monthly"
+	| "yearly";
 	defaultContentTypes: ContentType[];
 	maxResultsPerSearch: number;
 	enableNotifications: boolean;

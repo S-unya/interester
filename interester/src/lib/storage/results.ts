@@ -107,4 +107,24 @@ export const ResultStorage = {
 		await this.save(interestId, filtered);
 		return true;
 	},
+
+	/**
+	 * Toggle the pinned status of a result.
+	 */
+	async togglePin(
+		interestId: string,
+		resultId: string,
+	): Promise<FormattedResult | null> {
+		const results = await this.getByInterestId(interestId);
+		const index = results.findIndex((r) => r.id === resultId);
+		if (index === -1) return null;
+
+		results[index] = {
+			...results[index],
+			pinned: !results[index].pinned,
+		};
+
+		await this.save(interestId, results);
+		return results[index];
+	},
 };
