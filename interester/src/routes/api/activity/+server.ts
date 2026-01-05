@@ -1,10 +1,11 @@
 import { json } from "@sveltejs/kit";
-import { InterestStorage, ResultStorage } from "$lib/storage";
+import { ResultStorage, initializeStorage } from "$lib/storage";
 import type { RequestHandler } from "./$types";
 import type { FormattedResult } from "$lib/types";
 
 export const GET: RequestHandler = async () => {
     try {
+        await initializeStorage();
         const interestIds = await ResultStorage.listAll();
         const allResults: FormattedResult[] = [];
 

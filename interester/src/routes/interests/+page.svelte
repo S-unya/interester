@@ -136,6 +136,88 @@
         showForm = false;
     }
 
+    // Shield/Ignore Rules Modal State
+    let showIgnoreRulesModal = $state(false);
+    let ruleTargetInterest = $state<Interest | null>(null);
+    let showNewLocalRuleForm = $state(false);
+    let localRuleLabel = $state("");
+    let localRuleType = $state<"domains" | "urlSubstrings" | "titleIncludes">(
+        "domains",
+    );
+    let localRulePattern = $state("");
+
+    function openIgnoreRules(interest: Interest) {
+        ruleTargetInterest = interest;
+        showIgnoreRulesModal = true;
+    }
+
+    async function saveLocalRules() {
+        if (!ruleTargetInterest) return;
+        try {
+            const response = await fetch(
+                `/api/interests/${ruleTargetInterest.id}`,
+                {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        ignoreRules: ruleTargetInterest.ignoreRules,
+                    }),
+                },
+            );
+            const result = await response.json();
+            if (result.success) {
+                interests = interests.map((i) =>
+                    i.id === ruleTargetInterest!.id ? result.data : i,
+                );
+                ruleTargetInterest = result.data;
+            }
+        } catch (e) {
+            console.error("Failed to save local rules:", e);
+        }
+    }
+
+    function addLocalRule() {
+        if (!ruleTargetInterest || !localRuleLabel || !localRulePattern) return;
+        const patterns = localRulePattern
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        const newRule: any = {
+            id: crypto.randomUUID(),
+            label: localRuleLabel,
+            active: true,
+            createdAt: new Date().toISOString(),
+            scope: "interest",
+            createdBy: "user",
+            pattern: { [localRuleType]: patterns },
+        };
+
+        ruleTargetInterest.ignoreRules = [
+            ...(ruleTargetInterest.ignoreRules || []),
+            newRule,
+        ];
+        localRuleLabel = "";
+        localRulePattern = "";
+        showNewLocalRuleForm = false;
+        saveLocalRules();
+    }
+
+    function toggleLocalRule(ruleId: string) {
+        if (!ruleTargetInterest) return;
+        ruleTargetInterest.ignoreRules = ruleTargetInterest.ignoreRules?.map(
+            (r) => (r.id === ruleId ? { ...r, active: !r.active } : r),
+        );
+        saveLocalRules();
+    }
+
+    function deleteLocalRule(ruleId: string) {
+        if (!ruleTargetInterest) return;
+        ruleTargetInterest.ignoreRules = ruleTargetInterest.ignoreRules?.filter(
+            (r) => r.id !== ruleId,
+        );
+        saveLocalRules();
+    }
+
     onMount(() => {
         loadInterests();
     });
@@ -326,6 +408,14 @@
                             </button>
                             <button
                                 class="button-icon"
+                                onclick={() => openIgnoreRules(interest)}
+                                title="Noise Control (Ignore Rules)"
+                                aria-label={`Ignore Rules ${index + 1}`}
+                            >
+                                🛡️
+                            </button>
+                            <button
+                                class="button-icon"
                                 onclick={() => editInterest(interest)}
                                 aria-label={`Edit ${index + 1}`}
                             >
@@ -344,12 +434,229 @@
             </ol>
         </section>
     {/if}
+
+    {#if showIgnoreRulesModal && ruleTargetInterest}
+        <div class="form-modal">
+            <div class="form-container">
+                <div class="form-header">
+                    <h2>Noise Control: {ruleTargetInterest.name}</h2>
+                    <button
+                        class="close-button"
+                        onclick={() => (showIgnoreRulesModal = false)}>✕</button
+                    >
+                </div>
+
+                <div class="modal-body">
+                    <div class="section-actions">
+                        <button
+                            class="button-primary-sm"
+                            onclick={() =>
+                                (showNewLocalRuleForm = !showNewLocalRuleForm)}
+                        >
+                            {showNewLocalRuleForm
+                                ? "Cancel"
+                                : "+ New Local Rule"}
+                        </button>
+                    </div>
+
+                    {#if showNewLocalRuleForm}
+                        <div class="local-rule-form">
+                            <div class="form-group">
+                                <label for="l-label">Rule Label</label>
+                                <input
+                                    id="l-label"
+                                    type="text"
+                                    bind:value={localRuleLabel}
+                                    placeholder="e.g., Hide Promotions"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="l-type">Type</label>
+                                <select id="l-type" bind:value={localRuleType}>
+                                    <option value="domains">Domains</option>
+                                    <option value="urlSubstrings"
+                                        >URL Substrings</option
+                                    >
+                                    <option value="titleIncludes"
+                                        >Title Keywords</option
+                                    >
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="l-pattern"
+                                    >Patterns (comma-separated)</label
+                                >
+                                <textarea
+                                    id="l-pattern"
+                                    bind:value={localRulePattern}
+                                    placeholder="e.g., promo, deal"
+                                ></textarea>
+                            </div>
+                            <button
+                                class="button-primary"
+                                onclick={addLocalRule}>Add Rule</button
+                            >
+                        </div>
+                    {/if}
+
+                    <div class="local-rules-list">
+                        {#if !ruleTargetInterest.ignoreRules || ruleTargetInterest.ignoreRules.length === 0}
+                            <div class="empty-rules">
+                                No local rules for this interest.
+                            </div>
+                        {:else}
+                            {#each ruleTargetInterest.ignoreRules as rule}
+                                <div
+                                    class="rule-mini-card"
+                                    class:inactive={!rule.active}
+                                >
+                                    <div class="rule-info">
+                                        <strong>{rule.label}</strong>
+                                        <div class="rule-meta">
+                                            {#if rule.pattern.domains}
+                                                <span
+                                                    >Domains: {rule.pattern.domains.join(
+                                                        ", ",
+                                                    )}</span
+                                                >
+                                            {/if}
+                                            {#if rule.pattern.urlSubstrings}
+                                                <span
+                                                    >URLs: {rule.pattern.urlSubstrings.join(
+                                                        ", ",
+                                                    )}</span
+                                                >
+                                            {/if}
+                                            {#if rule.pattern.titleIncludes}
+                                                <span
+                                                    >Titles: {rule.pattern.titleIncludes.join(
+                                                        ", ",
+                                                    )}</span
+                                                >
+                                            {/if}
+                                        </div>
+                                    </div>
+                                    <div class="rule-btns">
+                                        <button
+                                            class="toggle-link"
+                                            onclick={() =>
+                                                toggleLocalRule(rule.id)}
+                                        >
+                                            {rule.active ? "Disable" : "Enable"}
+                                        </button>
+                                        <button
+                                            class="delete-link"
+                                            onclick={() =>
+                                                deleteLocalRule(rule.id)}
+                                            >Delete</button
+                                        >
+                                    </div>
+                                </div>
+                            {/each}
+                        {/if}
+                    </div>
+                </div>
+            </div>
+        </div>
+    {/if}
 </div>
 
 <style>
     .interests-page {
         max-width: 1000px;
         margin: 0 auto;
+        animation: fadeIn 0.4s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+    .section-actions {
+        margin-bottom: 1.5rem;
+    }
+
+    .local-rule-form {
+        background: #f9f9f9;
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid #eee;
+        margin-bottom: 1.5rem;
+    }
+
+    .local-rules-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .rule-mini-card {
+        padding: 1rem;
+        border: 1px solid #eee;
+        border-radius: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .rule-mini-card.inactive {
+        opacity: 0.5;
+        background: #fafafa;
+        border-style: dashed;
+    }
+
+    .rule-meta {
+        font-size: 0.8rem;
+        color: #777;
+        margin-top: 0.25rem;
+    }
+    .rule-btns {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.85rem;
+    }
+    .toggle-link {
+        background: none;
+        border: none;
+        color: #1976d2;
+        cursor: pointer;
+        font-weight: 600;
+        padding: 0;
+    }
+    .delete-link {
+        background: none;
+        border: none;
+        color: #d32f2f;
+        cursor: pointer;
+        font-weight: 600;
+        padding: 0;
+    }
+
+    .empty-rules {
+        text-align: center;
+        padding: 2rem;
+        color: #999;
+        border: 1px dashed #eee;
+        border-radius: 8px;
+    }
+
+    .button-primary-sm {
+        padding: 6px 12px;
+        background: #1976d2;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
     }
 
     header {

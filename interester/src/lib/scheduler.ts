@@ -2,10 +2,11 @@ import { InterestStorage } from '$lib/storage';
 import { sendSystemNotification } from '$lib/notifications';
 import type { Interest } from '$lib/types';
 
-const CHECK_INTERVAL_MS = 60 * 60 * 1000; // Check every hour by default (can be overridden)
+// Environment Detection
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 /**
- * Check if an interest is due for a scan.
+ * Check if an interest is due for a scan (used in browser/fallback mode).
  */
 function isInterestDue(interest: Interest): boolean {
     if (!interest.active) return false;
@@ -30,68 +31,114 @@ function isInterestDue(interest: Interest): boolean {
 }
 
 /**
- * Run checks for all interests.
+ * Perform the scan for a specific interest.
  */
-async function checkAndRunInterests() {
-    console.log('[Scheduler] Checking for due interests...');
+async function triggerScan(interestId: string) {
     try {
-        // We use the storage directly. In browser, this uses the fetch adapter which goes to API.
-        const interests = await InterestStorage.getAll();
+        console.log(`[Scheduler] Triggering scan via API for: ${interestId}`);
+        const response = await fetch(`/api/interests/${interestId}/run`, {
+            method: 'POST'
+        });
 
-        for (const interest of interests) {
-            if (isInterestDue(interest)) {
-                console.log(`[Scheduler] Interest "${interest.name}" is due. Triggering scan via API...`);
-                try {
-                    // Call the API endpoint to run the scan
-                    const response = await fetch(`/api/interests/${interest.id}/run`, {
-                        method: 'POST'
-                    });
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                // The API call usually handles notifications if they are also server-side, 
+                // but let's check who sends notifications.
+                // In the original scheduler, it was:
+                // await sendSystemNotification('New Interest Summary', `Found new content for: ${interest.name}`);
+                // Since triggerScan is called in the client, we can send notification here.
 
-                    if (response.ok) {
-                        const result = await response.json();
-
-                        // We assume the API updates lastRanAt, but we can also rely on the next fetch to see it?
-                        // Actually, if we want to update local state or just trust the API did it.
-                        // The API should handle updating 'lastRanAt'.
-
-                        // Notify
-                        if (result.success) {
-                            await sendSystemNotification(
-                                'New Interest Summary',
-                                `Found new content for: ${interest.name}`
-                            );
-                        }
-                    } else {
-                        console.error(`[Scheduler] API call failed for "${interest.name}":`, await response.text());
-                    }
-
-                } catch (err) {
-                    console.error(`[Scheduler] Failed to trigger scan for "${interest.name}":`, err);
-                }
+                // We need the interest name for the notification.
+                // The result might contain it or we might need to fetch it.
+                // For now, let's just use the result data if available.
+                const interestName = result.data?.interestName || 'New Interest Content';
+                await sendSystemNotification(
+                    'New Interest Summary',
+                    `Found new content for interest.`
+                );
             }
         }
-    } catch (e) {
-        console.error('[Scheduler] Failed to get interests:', e);
+    } catch (err) {
+        console.error(`[Scheduler] Failed to trigger scan for interest ${interestId}:`, err);
     }
 }
 
 /**
- * Start the scheduler loop.
- * Returns a cleanup function to stop the scheduler.
+ * Check all interests and run those that are due.
  */
-export function startScheduler(intervalMs: number = CHECK_INTERVAL_MS): () => void {
-    console.log('[Scheduler] Started.');
+async function checkAndRunInterests() {
+    console.log('[Scheduler] Manual check for due interests...');
+    try {
+        const interests = await InterestStorage.getAll();
+        for (const interest of interests) {
+            if (isInterestDue(interest)) {
+                await triggerScan(interest.id);
+            }
+        }
+    } catch (e) {
+        console.error('[Scheduler] Failed to check interests:', e);
+    }
+}
 
-    // Run an initial check after 5 seconds to catch up on missed schedules
-    const initialCheckId = setTimeout(() => {
-        checkAndRunInterests();
-    }, 5000);
+/**
+ * Start the scheduler.
+ * In Tauri: Listens for Rust events.
+ * In Browser: Uses Web Worker.
+ */
+export async function startScheduler(): Promise<() => void> {
+    console.log(`[Scheduler] Starting (Environment: ${isTauri ? 'Tauri' : 'Browser'})`);
 
-    const intervalId = setInterval(checkAndRunInterests, intervalMs);
+    let cleanup: () => void = () => { };
+
+    if (isTauri) {
+        try {
+            const { listen } = await import('@tauri-apps/api/event');
+            const unlisten = await listen<string>('scan-due', (event) => {
+                const interestId = event.payload;
+                console.log(`[Scheduler] Received scan-due from Rust for interest: ${interestId}`);
+                triggerScan(interestId);
+            });
+            cleanup = () => {
+                unlisten();
+                console.log('[Scheduler] Tauri listener stopped.');
+            };
+        } catch (err) {
+            console.error('[Scheduler] Failed to setup Tauri event listener:', err);
+        }
+    } else {
+        // Fallback or non-Tauri browser context
+        try {
+            // Import worker using Vite's constructor syntax for better compatibility
+            const SchedulerWorker = await import('./scheduler.worker.ts?worker');
+            const worker = new SchedulerWorker.default();
+
+            worker.onmessage = (e) => {
+                if (e.data.type === 'tick') {
+                    checkAndRunInterests();
+                }
+            };
+
+            worker.postMessage({ type: 'start' });
+
+            cleanup = () => {
+                worker.postMessage({ type: 'stop' });
+                worker.terminate();
+                console.log('[Scheduler] Web Worker stopped.');
+            };
+        } catch (err) {
+            console.warn('[Scheduler] Web Workers not supported or failed to load. Falling back to setInterval.', err);
+            const interval = setInterval(checkAndRunInterests, 60 * 60 * 1000);
+            cleanup = () => clearInterval(interval);
+        }
+    }
+
+    // Run initial check after 5 seconds
+    const initialCheck = setTimeout(checkAndRunInterests, 5000);
 
     return () => {
-        clearTimeout(initialCheckId);
-        clearInterval(intervalId);
+        clearTimeout(initialCheck);
+        cleanup();
         console.log('[Scheduler] Stopped.');
     };
 }

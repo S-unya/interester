@@ -13,9 +13,12 @@
 
   onMount(() => {
     // Start scheduler
-    const stopScheduler = startScheduler(); // checks every hour by default
+    let stopScheduler: () => void;
+    startScheduler().then((stop) => {
+      stopScheduler = stop;
+    });
     return () => {
-      stopScheduler();
+      if (stopScheduler) stopScheduler();
     };
   });
 </script>

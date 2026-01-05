@@ -114,6 +114,8 @@ export interface UserPreferences {
 
 	// Optional default retention for results, in days
 	defaultResultRetentionDays?: number;
+
+	globalIgnoreRules?: IgnoreRule[];
 }
 
 /**
@@ -148,4 +150,5 @@ export interface InterestCreateInput {
 
 export interface InterestUpdateInput extends Partial<InterestCreateInput> {
 	active?: boolean;
+	ignoreRules?: IgnoreRule[];
 }
