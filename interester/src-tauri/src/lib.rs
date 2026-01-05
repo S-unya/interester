@@ -79,9 +79,16 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+fn send_background_notification<R: Runtime>(app: &tauri::AppHandle<R>) {
+    let _ = tauri_plugin_notification::Notification::new("interester")
+        .title("Running in Background")
+        .body("Interester is still running in the system tray. Use the tray menu to quit fully.")
+        .show();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
@@ -158,6 +165,7 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
+                send_background_notification(window.app_handle());
             }
         });
 
@@ -173,6 +181,7 @@ pub fn run() {
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.hide();
                     }
+                    send_background_notification(app_handle);
                 }
             }
         });
