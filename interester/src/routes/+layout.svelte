@@ -3,6 +3,7 @@
 
   import { onMount } from "svelte";
   import { startScheduler } from "$lib/scheduler";
+  import Toast from "$lib/components/Toast.svelte";
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: "🏠" },
@@ -48,6 +49,7 @@
   <main class="content">
     <slot />
   </main>
+  <Toast />
 </div>
 
 <style>

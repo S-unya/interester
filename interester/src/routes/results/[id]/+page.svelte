@@ -7,7 +7,13 @@
     ResultNotesStorage,
     ResultStorage,
   } from "$lib/storage";
-  import type { FormattedResult, Interest, ResultNote } from "$lib/types";
+  import { isTauri, generateId } from "$lib/utils";
+  import type {
+    FormattedResult,
+    Interest,
+    ResultNote,
+    DiscreteItem,
+  } from "$lib/types";
 
   let interest = $state<Interest | null>(null);
   let results = $state<FormattedResult[]>([]);
@@ -201,6 +207,103 @@
     }
   }
 
+  // Calendar Helpers
+  function getGoogleCalendarUrl(item: DiscreteItem) {
+    const title = encodeURIComponent(item.title);
+    const details = encodeURIComponent(
+      item.summary + "\n\nSource: " + item.url,
+    );
+    const location = encodeURIComponent(item.location || "");
+
+    // We try to parse the date. If it's invalid, we just open GCal without a specific time
+    let dateStr = "";
+    if (item.date) {
+      const d = new Date(item.date);
+      if (!isNaN(d.getTime())) {
+        const iso = d.toISOString().replace(/-|:|\.\d+/g, "");
+        dateStr = `&dates=${iso}/${iso}`; // Default to same start/end
+      }
+    }
+
+    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}${dateStr}`;
+  }
+
+  function downloadIcs(item: DiscreteItem) {
+    const title = item.title;
+    const details = item.summary + "\\n\\nSource: " + item.url;
+    const location = item.location || "";
+
+    let dateStr =
+      "DTSTART:" + new Date().toISOString().replace(/-|:|\.\d+/g, "");
+    if (item.date) {
+      const d = new Date(item.date);
+      if (!isNaN(d.getTime())) {
+        dateStr = "DTSTART:" + d.toISOString().replace(/-|:|\.\d+/g, "");
+      }
+    }
+
+    const icsContent = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      `SUMMARY:${title}`,
+      `DESCRIPTION:${details}`,
+      `LOCATION:${location}`,
+      dateStr,
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\n");
+
+    const blob = new Blob([icsContent], {
+      type: "text/calendar;charset=utf-8",
+    });
+    const link = document.createElement("a");
+    link.href = window.URL.createObjectURL(blob);
+    link.setAttribute("download", `${title.replace(/\s+/g, "_")}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Tauri Link Opener
+  async function openExternal(url: string, e?: Event) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    if (isTauri()) {
+      try {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        if (typeof openUrl === "function") {
+          await openUrl(url);
+          return;
+        }
+        // Fallback if openUrl is not found (might be just 'open' in some versions/configs)
+        const opener = (await import("@tauri-apps/plugin-opener")) as any;
+        const openFunc = opener.openUrl || opener.open;
+        if (typeof openFunc === "function") {
+          await openFunc(url);
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to open URL in Tauri:", err);
+      }
+    }
+
+    // Web fallback or if Tauri call failed
+    window.open(url, "_blank");
+  }
+
+  // Handle clicks on links inside the generated HTML
+  function handleHtmlClick(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    const anchor = target.closest("a");
+    if (anchor && anchor.href) {
+      openExternal(anchor.href, e);
+    }
+  }
+
   onMount(loadData);
 </script>
 
@@ -306,9 +409,70 @@
               </header>
 
               <section class="result-body">
-                <div class="html" aria-label="AI generated summary">
+                <button
+                  class="html-summary-btn"
+                  onclick={handleHtmlClick}
+                  onkeydown={(e) =>
+                    e.key === "Enter" && handleHtmlClick(e as any)}
+                  type="button"
+                >
                   {@html result.formattedHtml}
-                </div>
+                </button>
+
+                {#if result.items && result.items.length > 0}
+                  <div class="discrete-items">
+                    <h3>Highlights & Events</h3>
+                    <div class="items-grid">
+                      {#each [...result.items].sort((a, b) => {
+                        if (a.type === "event" && b.type === "event" && a.date && b.date) {
+                          return new Date(a.date).getTime() - new Date(b.date).getTime();
+                        }
+                        return 0;
+                      }) as item}
+                        <div class="item-card {item.type}">
+                          <div class="item-header">
+                            <span class="item-badge">{item.type}</span>
+                            {#if item.date}
+                              <span class="item-date">{item.date}</span>
+                            {/if}
+                          </div>
+                          <h4>{item.title}</h4>
+                          <p>{item.summary}</p>
+                          {#if item.location}
+                            <div class="item-location">📍 {item.location}</div>
+                          {/if}
+                          <div class="item-footer">
+                            <button
+                              class="link-btn"
+                              onclick={(e) => openExternal(item.url, e)}
+                            >
+                              View Source
+                            </button>
+                            {#if item.type === "event"}
+                              <div class="calendar-btns">
+                                <button
+                                  class="cal-btn"
+                                  onclick={() =>
+                                    openExternal(getGoogleCalendarUrl(item))}
+                                  title="Add to Google Calendar"
+                                >
+                                  GCal
+                                </button>
+                                <button
+                                  class="cal-btn"
+                                  onclick={() => downloadIcs(item)}
+                                  title="Download .ics file"
+                                >
+                                  ICS
+                                </button>
+                              </div>
+                            {/if}
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
 
                 {#if result.keyPoints && result.keyPoints.length > 0}
                   <div class="key-points">
@@ -327,9 +491,12 @@
                     <ul>
                       {#each result.sources as source}
                         <li>
-                          <a href={source.url} target="_blank" rel="noreferrer">
+                          <button
+                            class="source-link-btn"
+                            onclick={(e) => openExternal(source.url, e)}
+                          >
                             {source.title}
-                          </a>
+                          </button>
                           {#if source.date}
                             <span class="source-date">({source.date})</span>
                           {/if}
@@ -582,12 +749,202 @@
     font-size: 1.05rem;
   }
 
-  .html :global(a) {
+  .html-summary-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+    cursor: default;
+  }
+
+  .html-summary-btn :global(a) {
     color: #1976d2;
     text-decoration: none;
     font-weight: 500;
+    cursor: pointer;
   }
-  .html :global(a:hover) {
+  .html-summary-btn :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  .html-summary-btn :global(a) {
+    color: #1976d2;
+    text-decoration: none;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .html-summary-btn :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  .discrete-items {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  .discrete-items h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 1.25rem;
+    color: #333;
+  }
+
+  .items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .item-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    transition:
+      transform 0.2s,
+      box-shadow 0.2s;
+  }
+
+  .item-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    border-color: #cbd5e1;
+  }
+
+  .item-card.event {
+    background: #fffcf0;
+    border-color: #fef3c7;
+  }
+  .item-card.news {
+    background: #f0f9ff;
+    border-color: #e0f2fe;
+  }
+
+  .item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .item-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #e2e8f0;
+    color: #475569;
+  }
+
+  .item-card.event .item-badge {
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .item-card.news .item-badge {
+    background: #e0f2fe;
+    color: #075985;
+  }
+
+  .item-date {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 500;
+  }
+
+  .item-card h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.3;
+  }
+
+  .item-card p {
+    margin: 0 0 1rem 0;
+    font-size: 0.9rem;
+    color: #475569;
+    flex: 1;
+    line-height: 1.5;
+  }
+
+  .item-location {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .item-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    padding-top: 0.75rem;
+  }
+
+  .link-btn {
+    background: none;
+    border: none;
+    color: #1976d2;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .link-btn:hover {
+    text-decoration: underline;
+  }
+
+  .calendar-btns {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .cal-btn {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: #475569;
+    transition: all 0.2s;
+  }
+
+  .cal-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #1e293b;
+  }
+
+  .source-link-btn {
+    background: none;
+    border: none;
+    color: #1976d2;
+    font-weight: 500;
+    font-size: inherit;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+  }
+
+  .source-link-btn:hover {
     text-decoration: underline;
   }
 

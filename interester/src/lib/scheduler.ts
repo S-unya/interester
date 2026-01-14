@@ -1,9 +1,8 @@
-import { InterestStorage } from '$lib/storage';
+import { InterestStorage, ResultStorage, initializeStorage } from '$lib/storage';
 import { sendSystemNotification } from '$lib/notifications';
+import { ScannerClient } from '$lib/scanner-client';
 import type { Interest } from '$lib/types';
-
-// Environment Detection
-const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+import { isTauri } from '$lib/utils';
 
 /**
  * Check if an interest is due for a scan (used in browser/fallback mode).
@@ -35,30 +34,29 @@ function isInterestDue(interest: Interest): boolean {
  */
 async function triggerScan(interestId: string) {
     try {
-        console.log(`[Scheduler] Triggering scan via API for: ${interestId}`);
-        const response = await fetch(`/api/interests/${interestId}/run`, {
-            method: 'POST'
+        await initializeStorage();
+        const interest = await InterestStorage.getById(interestId);
+        if (!interest) {
+            console.warn(`[Scheduler] Interest not found: ${interestId}`);
+            return;
+        }
+
+        console.log(`[Scheduler] Triggering scan via API for: ${interest.name}`);
+        const result = await ScannerClient.performScan(interest);
+
+        // Save results
+        const existing = await ResultStorage.getByInterestId(interestId);
+        await ResultStorage.save(interestId, [result, ...existing]);
+
+        // Update lastRanAt
+        await InterestStorage.update(interestId, {
+            lastRanAt: new Date().toISOString()
         });
 
-        if (response.ok) {
-            const result = await response.json();
-            if (result.success) {
-                // The API call usually handles notifications if they are also server-side, 
-                // but let's check who sends notifications.
-                // In the original scheduler, it was:
-                // await sendSystemNotification('New Interest Summary', `Found new content for: ${interest.name}`);
-                // Since triggerScan is called in the client, we can send notification here.
-
-                // We need the interest name for the notification.
-                // The result might contain it or we might need to fetch it.
-                // For now, let's just use the result data if available.
-                const interestName = result.data?.interestName || 'New Interest Content';
-                await sendSystemNotification(
-                    'New Interest Summary',
-                    `Found new content for interest.`
-                );
-            }
-        }
+        await sendSystemNotification(
+            'New Interest Summary',
+            `Found new content for interest: ${interest.name}`
+        );
     } catch (err) {
         console.error(`[Scheduler] Failed to trigger scan for interest ${interestId}:`, err);
     }
@@ -70,6 +68,7 @@ async function triggerScan(interestId: string) {
 async function checkAndRunInterests() {
     console.log('[Scheduler] Manual check for due interests...');
     try {
+        await initializeStorage();
         const interests = await InterestStorage.getAll();
         for (const interest of interests) {
             if (isInterestDue(interest)) {
@@ -87,11 +86,11 @@ async function checkAndRunInterests() {
  * In Browser: Uses Web Worker.
  */
 export async function startScheduler(): Promise<() => void> {
-    console.log(`[Scheduler] Starting (Environment: ${isTauri ? 'Tauri' : 'Browser'})`);
+    console.log(`[Scheduler] Starting (Environment: ${isTauri() ? 'Tauri' : 'Browser'})`);
 
     let cleanup: () => void = () => { };
 
-    if (isTauri) {
+    if (isTauri()) {
         try {
             const { listen } = await import('@tauri-apps/api/event');
             const unlisten = await listen<string>('scan-due', (event) => {

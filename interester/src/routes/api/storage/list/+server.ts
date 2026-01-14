@@ -11,8 +11,8 @@ export const GET: RequestHandler = async ({ url }: { url: URL }) => {
 	try {
 		const prefix = url.searchParams.get("prefix") || "";
 
-		// List files in static/data directory
-		const dataDir = "static/data";
+		// List files in data directory
+		const dataDir = "data";
 		const searchDir = join(dataDir, prefix);
 
 		const files: string[] = await readdir(searchDir, { recursive: true });

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{
@@ -7,6 +8,7 @@ use tauri::{
     Emitter, Manager, RunEvent, Runtime,
 };
 use tauri_plugin_store::StoreBuilder;
+use tauri_plugin_notification::NotificationExt;
 
 static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
 
@@ -14,11 +16,60 @@ static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
 struct Interest {
     id: String,
     name: String,
+    description: Option<String>,
+    #[serde(rename = "searchTerms")]
+    search_terms: Vec<String>,
+    #[serde(rename = "monitorUrls")]
+    monitor_urls: Option<Vec<String>>,
     active: bool,
     #[serde(rename = "scheduleFrequency")]
     schedule_frequency: Option<String>,
     #[serde(rename = "lastRanAt")]
     last_ran_at: Option<String>,
+    #[serde(rename = "createdAt")]
+    created_at: Option<String>,
+    #[serde(rename = "updatedAt")]
+    updated_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Source {
+    title: String,
+    url: String,
+    date: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct DiscreteItem {
+    id: String,
+    #[serde(rename = "type")]
+    item_type: String,
+    title: String,
+    summary: String,
+    url: String,
+    date: Option<String>,
+    location: Option<String>,
+    source: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct FormattedResult {
+    id: String,
+    #[serde(rename = "interestId")]
+    interest_id: String,
+    #[serde(rename = "searchId")]
+    search_id: String,
+    #[serde(rename = "formattedHtml")]
+    formatted_html: String,
+    #[serde(rename = "formattedText")]
+    formatted_text: String,
+    summary: String,
+    #[serde(rename = "keyPoints")]
+    key_points: Vec<String>,
+    items: Option<Vec<DiscreteItem>>,
+    sources: Vec<Source>,
+    #[serde(rename = "generatedAt")]
+    generated_at: String,
 }
 
 fn is_interest_due(interest: &Interest) -> bool {
@@ -73,6 +124,193 @@ fn start_scheduler<R: Runtime>(app_handle: tauri::AppHandle<R>) {
     });
 }
 
+async fn generate_gemini_text(prompt: &str, system: &str) -> Result<String, String> {
+    let api_key = std::env::var("GEMINI_KEY").map_err(|_| "GEMINI_KEY not set")?;
+    let client = reqwest::Client::new();
+    let url = format!("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}", api_key);
+
+    let body = json!({
+        "system_instruction": {
+            "parts": [{ "text": system }]
+        },
+        "contents": [{
+            "parts": [{ "text": prompt }]
+        }]
+    });
+
+    let resp = client.post(url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        let err_text = resp.text().await.unwrap_or_default();
+        return Err(format!("Gemini API error: {}", err_text));
+    }
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    
+    let text = json["candidates"][0]["content"]["parts"][0]["text"]
+        .as_str()
+        .ok_or("Failed to parse Gemini response")?;
+
+    Ok(text.to_string())
+}
+
+async fn serper_search(query: &str) -> Result<Vec<serde_json::Value>, String> {
+    let api_key = std::env::var("SERPER_KEY").map_err(|_| "SERPER_KEY not set")?;
+    let client = reqwest::Client::new();
+    let url = "https://google.serper.dev/search";
+
+    let body = json!({
+        "q": query,
+        "num": 5,
+        "gl": "us",
+        "hl": "en"
+    });
+
+    let resp = client.post(url)
+        .header("X-API-KEY", api_key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Serper API error: {}", resp.status()));
+    }
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let organic = json["organic"].as_array().cloned().unwrap_or_default();
+
+    Ok(organic)
+}
+
+fn extract_json(raw: &str) -> String {
+    let clean = raw.trim();
+    if let Some(start) = clean.find('{') {
+        if let Some(end) = clean.rfind('}') {
+            return clean[start..=end].to_string();
+        }
+    }
+    if let Some(start) = clean.find('[') {
+        if let Some(end) = clean.rfind(']') {
+            return clean[start..=end].to_string();
+        }
+    }
+    clean.to_string()
+}
+
+#[tauri::command]
+async fn run_search_scan(interest: Interest) -> Result<FormattedResult, String> {
+    println!("[Rust Command] Running search scan for: {}", interest.name);
+
+    let prompts_json = include_str!("../../src/lib/prompts.json");
+    let prompts: serde_json::Value = serde_json::from_str(prompts_json).map_err(|e| e.to_string())?;
+
+    // 1. Generate Queries
+    let query_template = prompts["queryGenerator"]["prompt"].as_str().ok_or("Missing query prompt")?;
+    let query_system = prompts["queryGenerator"]["system"].as_str().unwrap_or("You are a search expert.");
+    
+    let query_prompt = query_template
+        .replace("{name}", &interest.name)
+        .replace("{description}", interest.description.as_deref().unwrap_or("N/A"))
+        .replace("{keywords}", &interest.search_terms.join(", "))
+        .replace("{urls}", &interest.monitor_urls.as_ref().map(|u| u.join(", ")).unwrap_or_else(|| "N/A".to_string()))
+        .replace("{date}", &chrono::Utc::now().to_rfc3339());
+    
+    let queries_raw = generate_gemini_text(&query_prompt, query_system).await?;
+    println!("[Rust Command] Raw Queries response: {}", queries_raw);
+    let clean_queries = extract_json(&queries_raw);
+    let queries: Vec<String> = serde_json::from_str(&clean_queries).unwrap_or_else(|e| {
+        println!("[Rust Command] Failed to parse queries JSON ({}): {}. Falling back to search terms.", e, clean_queries);
+        interest.search_terms.clone()
+    });
+    println!("[Rust Command] Using queries: {:?}", queries);
+
+    // 2. Perform Searches
+    let mut all_raw = Vec::new();
+    for q in queries {
+        println!("[Rust Command] Searching for: {}", q);
+        if let Ok(results) = serper_search(&q).await {
+            println!("[Rust Command] Found {} results for query.", results.len());
+            all_raw.extend(results);
+        }
+    }
+
+    // Deduplicate by link
+    let mut unique = std::collections::HashMap::new();
+    for item in all_raw {
+        if let Some(link) = item["link"].as_str() {
+            unique.entry(link.to_string()).or_insert(item);
+        }
+    }
+    let unique_results: Vec<_> = unique.into_values().collect();
+    println!("[Rust Command] Total unique results: {}", unique_results.len());
+
+    // 3. Summarize
+    let results_context = if unique_results.is_empty() {
+        "No search results found.".to_string()
+    } else {
+        unique_results.iter().map(|r| {
+            format!("Title: {}\nLink: {}\nSnippet: {}\n---", 
+                r["title"].as_str().unwrap_or("N/A"),
+                r["link"].as_str().unwrap_or("N/A"),
+                r["snippet"].as_str().unwrap_or("N/A")
+            )
+        }).collect::<Vec<_>>().join("\n")
+    };
+
+    let summary_template = prompts["summaryCurator"]["prompt"].as_str().ok_or("Missing summary prompt")?;
+    let summary_system = prompts["summaryCurator"]["system"].as_str().unwrap_or("You are a curator.");
+
+    let summary_prompt = summary_template
+        .replace("{name}", &interest.name)
+        .replace("{description}", interest.description.as_deref().unwrap_or("N/A"))
+        .replace("{results}", &results_context);
+
+    let summary_raw = generate_gemini_text(&summary_prompt, summary_system).await?;
+    println!("[Rust Command] Raw Summary response: {}", summary_raw);
+    let clean_summary = extract_json(&summary_raw);
+    let data: serde_json::Value = serde_json::from_str(&clean_summary).map_err(|e| {
+        format!("Failed to parse summary JSON ({}): {}", e, clean_summary)
+    })?;
+
+    println!("[Rust Command] Successfully generated summary for: {}", interest.name);
+
+    Ok(FormattedResult {
+        id: uuid::Uuid::new_v4().to_string(),
+        interest_id: interest.id.clone(),
+        search_id: uuid::Uuid::new_v4().to_string(),
+        formatted_html: data["formattedHtml"].as_str().unwrap_or("").to_string(),
+        formatted_text: data["formattedText"].as_str().unwrap_or("").to_string(),
+        summary: data["summary"].as_str().unwrap_or("").to_string(),
+        key_points: data["keyPoints"].as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect())
+            .unwrap_or_default(),
+        items: data["items"].as_array()
+            .map(|a| a.iter().map(|v| DiscreteItem {
+                id: v["id"].as_str().map(|s| s.to_string()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                item_type: v["type"].as_str().unwrap_or("general").to_string(),
+                title: v["title"].as_str().unwrap_or("N/A").to_string(),
+                summary: v["summary"].as_str().unwrap_or_default().to_string(),
+                url: v["url"].as_str().unwrap_or_default().to_string(),
+                date: v["date"].as_str().map(|s| s.to_string()),
+                location: v["location"].as_str().map(|s| s.to_string()),
+                source: v["source"].as_str().map(|s| s.to_string()),
+            }).collect()),
+        sources: data["sources"].as_array()
+            .map(|a| a.iter().map(|v| Source {
+                title: v["title"].as_str().unwrap_or("N/A").to_string(),
+                url: v["url"].as_str().unwrap_or("N/A").to_string(),
+                date: v["date"].as_str().map(|s| s.to_string()),
+            }).collect())
+            .unwrap_or_default(),
+        generated_at: chrono::Utc::now().to_rfc3339(),
+    })
+}
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -80,7 +318,8 @@ fn greet(name: &str) -> String {
 }
 
 fn send_background_notification<R: Runtime>(app: &tauri::AppHandle<R>) {
-    let _ = tauri_plugin_notification::Notification::new("interester")
+    let _ = app.notification()
+        .builder()
         .title("Running in Background")
         .body("Interester is still running in the system tray. Use the tray menu to quit fully.")
         .show();
@@ -88,6 +327,24 @@ fn send_background_notification<R: Runtime>(app: &tauri::AppHandle<R>) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Explicitly load .env from root if we are in src-tauri
+    if let Err(e) = dotenvy::from_path("../.env") {
+        println!("[Rust] Warning: Failed to load .env from ../.env: {}. Trying default...", e);
+        let _ = dotenvy::dotenv();
+    }
+
+    if std::env::var("GEMINI_KEY").is_ok() {
+        println!("[Rust] GEMINI_KEY is present.");
+    } else {
+        println!("[Rust] ERROR: GEMINI_KEY is missing from environment.");
+    }
+    
+    if std::env::var("SERPER_KEY").is_ok() {
+        println!("[Rust] SERPER_KEY is present.");
+    } else {
+        println!("[Rust] ERROR: SERPER_KEY is missing from environment.");
+    }
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
@@ -170,7 +427,7 @@ pub fn run() {
         });
 
     builder
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, run_search_scan])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {

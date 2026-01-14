@@ -6,19 +6,9 @@
 import { configureStorage } from "./adapter";
 import { JsonFetchAdapter } from "./adapters/json-fetch";
 import { TauriStoreAdapter } from "./adapters/tauri-store";
+import { isTauri } from "../utils";
 
 let initialized = false;
-
-/**
- * Check if running in Tauri
- */
-function isTauriEnvironment(): boolean {
-	return (
-		typeof window !== "undefined" &&
-		"__TAURI__" in window &&
-		window.__TAURI__ !== undefined
-	);
-}
 
 /**
  * Check if running in browser context
@@ -43,7 +33,7 @@ export async function initializeStorage(): Promise<void> {
 			configureStorage(adapter);
 		} else {
 			// Client side (Browser or Tauri)
-			if (isTauriEnvironment()) {
+			if (isTauri()) {
 				console.log("Initializing Tauri store adapter...");
 				const adapter = new TauriStoreAdapter();
 				configureStorage(adapter);

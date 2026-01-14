@@ -46,7 +46,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			description: body.description,
 			searchTerms: body.searchTerms,
 			monitorUrls: body.monitorUrls || [],
-			contentTypes: body.contentTypes || ["general"],
 			active: true,
 		});
 

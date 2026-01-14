@@ -19,8 +19,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 
-		// Delete from static/data directory
-		const dataDir = "static/data";
+		// Delete from data directory
+		const dataDir = "data";
 		const filePath = join(dataDir, key);
 
 		await unlink(filePath);

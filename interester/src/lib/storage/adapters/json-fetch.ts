@@ -7,12 +7,9 @@ import { json } from "@sveltejs/kit";
 import type { StorageAdapter } from "../adapter";
 
 export class JsonFetchAdapter implements StorageAdapter {
-	private basePath: string;
 	private cache: Map<string, unknown> = new Map();
 
-	constructor(basePath = "/data") {
-		this.basePath = basePath;
-	}
+	constructor() { }
 
 	async read<T>(key: string): Promise<T | null> {
 		try {
@@ -21,7 +18,7 @@ export class JsonFetchAdapter implements StorageAdapter {
 				return this.cache.get(key) as T;
 			}
 
-			const url = `${this.basePath}/${key}`;
+			const url = `/api/storage/read?key=${encodeURIComponent(key)}`;
 			const response = await fetch(url);
 
 			if (!response.ok) {
@@ -66,7 +63,7 @@ export class JsonFetchAdapter implements StorageAdapter {
 
 	async exists(key: string): Promise<boolean> {
 		try {
-			const url = `${this.basePath}/${key}`;
+			const url = `/api/storage/read?key=${encodeURIComponent(key)}`;
 			const response = await fetch(url, { method: "HEAD" });
 			return response.ok;
 		} catch {

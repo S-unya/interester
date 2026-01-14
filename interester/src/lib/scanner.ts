@@ -3,14 +3,14 @@ import { ResultStorage } from "$lib/storage/results";
 import { generateGeminiText, serperSearch, type SerperOrganicResult } from "$lib/ai";
 import type { FormattedResult, Interest } from "$lib/types";
 import { generateId } from "$lib/utils";
+import prompts from "$lib/prompts.json";
 
 export const Scanner = {
     /**
-     * Run a full scan for a given interest:
-     * 1. Analyze intent & generate queries (LLM)
-     * 2. Search (Serper)
-     * 3. Summarize & Format (LLM)
-     * 4. Save results
+     * Run a full scan for a given interest (Legacy method that handles storage):
+     * 1. Load interest from storage
+     * 2. Perform scan
+     * 3. Save results to storage
      */
     async runInterestScan(interestId: string): Promise<FormattedResult> {
         await initializeStorage();
@@ -20,6 +20,21 @@ export const Scanner = {
             throw new Error(`Interest with ID ${interestId} not found`);
         }
 
+        const formatted = await this.performScan(interest);
+
+        // 4. Save (Server-side storage)
+        const existing = await ResultStorage.getByInterestId(interestId);
+        const newResultsList = [formatted, ...existing];
+        await ResultStorage.save(interestId, newResultsList);
+
+        return formatted;
+    },
+
+    /**
+     * Perform the actual AI scan logic without storage side effects.
+     * Useful for stateless API routes.
+     */
+    async performScan(interest: Interest): Promise<FormattedResult> {
         // 1. Generate Queries
         const queries = await this.generateQueries(interest);
         console.log(`[Scanner] Generated queries for "${interest.name}":`, queries);
@@ -44,35 +59,21 @@ export const Scanner = {
         // 3. Summarize & Format
         const formatted = await this.generateSummary(interest, uniqueResults);
 
-        // 4. Save
-        // We need to fetch existing results to append/update, or just overwrite?
-        // type definitions say getByInterestId returns FormattedResult[], so likely a list of reports.
-        const existing = await ResultStorage.getByInterestId(interestId);
-        const newResultsList = [formatted, ...existing]; // Prepend new result
-        await ResultStorage.save(interestId, newResultsList);
-
         return formatted;
     },
 
     async generateQueries(interest: Interest): Promise<string[]> {
-        const prompt = `
-You are an expert search query generator.
-Your goal is to generate 3-5 highly effective Google search queries to monitor the following user interest.
-
-Interest Name: ${interest.name}
-Description: ${interest.description || "N/A"}
-Keywords: ${interest.searchTerms.join(", ")}
-Specific URLs: ${interest.monitorUrls?.join(", ") ?? "N/A"}
-
-Think about the user's likely intent. Convert broad topics into specific, news-oriented, or discovery-oriented queries.
-Return ONLY a JSON array of strings. No markdown formatting.
-Example: ["query 1", "query 2"]
-`;
+        const prompt = prompts.queryGenerator.prompt
+            .replace("{name}", interest.name)
+            .replace("{description}", interest.description || "N/A")
+            .replace("{keywords}", interest.searchTerms.join(", "))
+            .replace("{urls}", interest.monitorUrls?.join(", ") ?? "N/A")
+            .replace("{date}", new Date().toISOString());
 
         try {
             const text = await generateGeminiText({
                 prompt,
-                system: "You are a helpful assistant that outputs raw JSON."
+                system: prompts.queryGenerator.system
             });
             // Clean up potentially excessive markdown
             const cleanText = text.replace(/```json|```/g, "").trim();
@@ -92,33 +93,15 @@ Snippet: ${r.snippet}
 Date: ${r.date || "Unknown"}
 `).join("\n");
 
-        const prompt = `
-You are an intelligent content curator.
-The user is interested in: "${interest.name}" (${interest.description}).
-
-Here are the latest search results found for this interest:
-${resultsContext}
-
-Tasks:
-1. filtering: Ignore results that are irrelevant, spammy, or duplicates.
-2. synthesis: Summarize the key findings into a cohesive daily briefing. Please translate the content into English.
-3. formatting: Produce a clean HTML report. Use <h3> for headlines, <p> for text, <ul>/<li> for lists. Include <a href="..."> links to the sources. Where the results are events, create a microformat vCard for each event.
-
-Output Format: JSON object with the following structure:
-{
-  "summary": "One sentence high-level summary",
-  "formattedHtml": "The full HTML report...",
-  "formattedText": "Plain text version of the report...",
-  "keyPoints": ["point 1", "point 2"],
-  "sources": [{ "title": "...", "url": "..." }]
-}
-Return ONLY raw JSON.
-`;
+        const prompt = prompts.summaryCurator.prompt
+            .replace("{name}", interest.name)
+            .replace("{description}", interest.description || "")
+            .replace("{results}", resultsContext);
 
         try {
             const text = await generateGeminiText({
                 prompt,
-                system: "You are a content curator that outputs structured JSON."
+                system: prompts.summaryCurator.system
             });
             const cleanText = text.replace(/```json|```/g, "").trim();
             const data = JSON.parse(cleanText);
@@ -126,11 +109,12 @@ Return ONLY raw JSON.
             return {
                 id: generateId(),
                 interestId: interest.id,
-                searchId: generateId(), // We don't have a separate search obj yet
+                searchId: generateId(),
                 formattedHtml: data.formattedHtml,
-                formattedText: data.formattedText,
+                formattedText: data.formattedText || "", // We can derive this if missing or leave empty
                 summary: data.summary,
                 keyPoints: data.keyPoints || [],
+                items: data.items || [],
                 sources: data.sources || [],
                 generatedAt: new Date().toISOString()
             };

@@ -22,8 +22,8 @@ export const POST: RequestHandler = async ({
 			);
 		}
 
-		// Write to static/data directory
-		const dataDir = "static/data";
+		// Write to data directory
+		const dataDir = "data";
 		const filePath = join(dataDir, key);
 
 		// Ensure directory exists

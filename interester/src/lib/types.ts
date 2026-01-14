@@ -88,6 +88,20 @@ export interface FormattedResult {
 	ignoredReason?: string;
 	ignoredByRuleId?: string;
 	pinned?: boolean;
+	items?: DiscreteItem[];
+}
+
+export type ItemType = "news" | "event" | "resource" | "opinion" | "general";
+
+export interface DiscreteItem {
+	id: string;
+	type: ItemType;
+	title: string;
+	summary: string;
+	url: string;
+	date?: string; // ISO string or human readable
+	location?: string; // For events
+	source?: string;
 }
 
 export interface SearchExecution {

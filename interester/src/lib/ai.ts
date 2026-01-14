@@ -35,6 +35,8 @@ export async function generateGeminiText(options: {
 }): Promise<string> {
 	const { prompt, system, abortSignal } = options;
 
+	console.log("[ai] Generating text with prompt:", prompt);
+
 	const result = await generateText({
 		model: geminiModel,
 		prompt,
@@ -82,27 +84,35 @@ export async function serperSearch(
 		throw new Error("SERPER_KEY environment variable is not set.");
 	}
 
-	const response = await fetch(SERPER_ENDPOINT, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			"X-API-KEY": SERPER_KEY,
-		},
-		body: JSON.stringify({
-			q: query,
-			num: options.num ?? 10,
-			gl: options.gl ?? "us",
-			hl: options.hl ?? "en",
-		}),
-	});
+	console.log("[ai] Performing Serper search with query:", query);
 
-	if (!response.ok) {
-		const bodyText = await response.text().catch(() => "");
-		throw new Error(
-			`Serper search failed with status ${response.status}: ${bodyText}`,
-		);
+	try {
+
+		const response = await fetch(SERPER_ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-API-KEY": SERPER_KEY,
+			},
+			body: JSON.stringify({
+				q: query,
+				num: options.num ?? 10,
+				gl: options.gl ?? "us",
+				hl: options.hl ?? "en",
+			}),
+		});
+
+		if (!response.ok) {
+			const bodyText = await response.text().catch(() => "");
+			throw new Error(
+				`Serper search failed with status ${response.status}: ${bodyText}`,
+			);
+		}
+
+		const json = (await response.json()) as SerperSearchResponse;
+		return json;
+	} catch (error) {
+		console.error("[ai] Serper search failed:", error);
+		return {};
 	}
-
-	const json = (await response.json()) as SerperSearchResponse;
-	return json;
 }

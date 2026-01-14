@@ -1,11 +1,19 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import type { Interest, InterestCreateInput } from "$lib/types";
+    import {
+        InterestStorage,
+        ResultStorage,
+        initializeStorage,
+    } from "$lib/storage";
+    import { ScannerClient } from "$lib/scanner-client";
+    import { toast } from "$lib/stores/toast";
 
     let interests = $state<Interest[]>([]);
     let loading = $state(true);
     let showForm = $state(false);
     let editingId = $state<string | null>(null);
+    let scanningIds = $state<Set<string>>(new Set());
 
     // Form fields
     let formName = $state("");
@@ -20,11 +28,8 @@
     async function loadInterests() {
         loading = true;
         try {
-            const response = await fetch("/api/interests");
-            const result = await response.json();
-            if (result.success) {
-                interests = result.data || [];
-            }
+            await initializeStorage();
+            interests = await InterestStorage.getAll();
         } catch (e) {
             console.error("Failed to load interests:", e);
         } finally {
@@ -33,20 +38,36 @@
     }
 
     async function runInterest(id: string) {
-        if (!confirm("Run search now? This may take a moment.")) return;
         try {
-            const response = await fetch(`/api/interests/${id}/run`, {
-                method: "POST",
-            });
-            const result = await response.json();
-            if (result.success) {
-                alert("Search completed successfully!");
-            } else {
-                alert("Search failed: " + (result.error || "Unknown error"));
+            await initializeStorage();
+            const interest = await InterestStorage.getById(id);
+            if (!interest) {
+                toast.error("Interest not found");
+                return;
             }
+
+            scanningIds.add(id);
+            scanningIds = new Set(scanningIds); // Force reactivity
+
+            const result = await ScannerClient.performScan(interest);
+
+            // Save the result using the correct storage adapter
+            const existing = await ResultStorage.getByInterestId(id);
+            await ResultStorage.save(id, [result, ...existing]);
+
+            // Update lastRanAt
+            await InterestStorage.update(id, {
+                lastRanAt: new Date().toISOString(),
+            });
+
+            await loadInterests();
+            toast.success("Search completed successfully!");
         } catch (e) {
             console.error("Failed to run interest:", e);
-            alert("Failed to run interest");
+            toast.error("Failed to run interest");
+        } finally {
+            scanningIds.delete(id);
+            scanningIds = new Set(scanningIds); // Force reactivity
         }
     }
 
@@ -61,41 +82,39 @@
             .filter(Boolean);
 
         if (!formName) {
-            alert("Name is required");
+            toast.error("Name is required");
             return;
         }
 
-        const payload: InterestCreateInput = {
-            name: formName,
-            description: formDescription || undefined,
-            searchTerms,
-            monitorUrls: monitorUrls.length > 0 ? monitorUrls : undefined,
-            scheduleFrequency: formScheduleFrequency,
-        };
-
         try {
-            const url = editingId
-                ? `/api/interests/${editingId}`
-                : "/api/interests";
-            const method = editingId ? "PUT" : "POST";
-
-            const response = await fetch(url, {
-                method,
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                await loadInterests();
-                resetForm();
+            await initializeStorage();
+            if (editingId) {
+                await InterestStorage.update(editingId, {
+                    name: formName,
+                    description: formDescription || undefined,
+                    searchTerms,
+                    monitorUrls:
+                        monitorUrls.length > 0 ? monitorUrls : undefined,
+                    scheduleFrequency: formScheduleFrequency,
+                });
             } else {
-                alert(result.error || "Failed to save interest");
+                await InterestStorage.create({
+                    name: formName,
+                    description: formDescription || undefined,
+                    searchTerms,
+                    monitorUrls:
+                        monitorUrls.length > 0 ? monitorUrls : undefined,
+                    scheduleFrequency: formScheduleFrequency,
+                    active: true,
+                });
             }
+
+            await loadInterests();
+            resetForm();
+            toast.success(editingId ? "Interest updated" : "Interest created");
         } catch (e) {
             console.error("Failed to save interest:", e);
-            alert("Failed to save interest");
+            toast.error("Failed to save interest");
         }
     }
 
@@ -103,14 +122,9 @@
         if (!confirm("Are you sure you want to delete this interest?")) return;
 
         try {
-            const response = await fetch(`/api/interests/${id}`, {
-                method: "DELETE",
-            });
-            const result = await response.json();
-
-            if (result.success) {
-                await loadInterests();
-            }
+            await initializeStorage();
+            await InterestStorage.delete(id);
+            await loadInterests();
         } catch (e) {
             console.error("Failed to delete interest:", e);
         }
@@ -395,38 +409,47 @@
                         <div class="interest-actions">
                             <a
                                 class="button-icon"
-                                aria-label={`View ${interest.name}`}
+                                aria-label={`View ${interest.name} results`}
                                 href={`/results/${interest.id}`}>👁️</a
                             >
                             <button
                                 class="button-icon"
                                 onclick={() => runInterest(interest.id)}
                                 title="Run Search Now"
-                                aria-label={`Run ${index + 1}`}
+                                aria-label={scanningIds.has(interest.id)
+                                    ? `Scan in progress for ${interest.name}`
+                                    : `Run scan for ${interest.name}`}
+                                disabled={scanningIds.has(interest.id)}
                             >
-                                ▶️
+                                {#if scanningIds.has(interest.id)}
+                                    <span class="spinner" aria-hidden="true"
+                                        >⏳</span
+                                    >
+                                {:else}
+                                    <span aria-hidden="true">▶️</span>
+                                {/if}
                             </button>
                             <button
                                 class="button-icon"
                                 onclick={() => openIgnoreRules(interest)}
                                 title="Noise Control (Ignore Rules)"
-                                aria-label={`Ignore Rules ${index + 1}`}
+                                aria-label={`Manage ignore rules for ${interest.name}`}
                             >
-                                🛡️
+                                <span aria-hidden="true">🛡️</span>
                             </button>
                             <button
                                 class="button-icon"
                                 onclick={() => editInterest(interest)}
-                                aria-label={`Edit ${index + 1}`}
+                                aria-label={`Edit ${interest.name}`}
                             >
-                                ✏️
+                                <span aria-hidden="true">✏️</span>
                             </button>
                             <button
                                 class="button-icon"
                                 onclick={() => deleteInterest(interest.id)}
-                                aria-label={`Delete ${index + 1}`}
+                                aria-label={`Delete ${interest.name}`}
                             >
-                                🗑️
+                                <span aria-hidden="true">🗑️</span>
                             </button>
                         </div>
                     </li>
@@ -721,8 +744,27 @@
         transition: opacity 0.2s;
     }
 
-    .button-icon:hover {
+    .button-icon:hover:not(:disabled) {
         opacity: 1;
+    }
+
+    .button-icon:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+
+    .spinner {
+        display: inline-block;
+        animation: spin 2s linear infinite;
+    }
+
+    @keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
     }
 
     .form-modal {

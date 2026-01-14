@@ -4,7 +4,7 @@ import { Scanner } from "$lib/scanner";
 import type { ApiResponse, FormattedResult } from "$lib/types";
 
 // POST /api/interests/[id]/run - Trigger a manual scan for an interest
-export const POST: RequestHandler = async ({ params }) => {
+export const POST: RequestHandler = async ({ request, params }) => {
 	try {
 		if (!params.id) {
 			return json(
@@ -16,8 +16,21 @@ export const POST: RequestHandler = async ({ params }) => {
 			);
 		}
 
-		console.log(`[API] Triggering scan for interest ${params.id}`);
-		const result = await Scanner.runInterestScan(params.id);
+		// Parse interest from request body (sent by client who has the correct storage)
+		const interest = await request.json();
+
+		if (!interest || interest.id !== params.id) {
+			return json(
+				{
+					success: false,
+					error: "Valid interest data is required in request body",
+				} satisfies ApiResponse<FormattedResult>,
+				{ status: 400 },
+			);
+		}
+
+		console.log(`[API] Triggering scan for interest ${params.id} (${interest.name})`);
+		const result = await Scanner.performScan(interest);
 
 		return json({
 			success: true,
