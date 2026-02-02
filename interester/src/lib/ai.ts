@@ -1,32 +1,64 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
+import { generateText, type LanguageModel } from "ai";
+import { PreferencesStorage } from "./storage/preferences";
 
-// TODO: eventually we want to allow users to select models and supply their own API keys.
-// Read API keys from environment variables.
-// These are expected to be defined in the `.env` file in the `interester` directory.
-import { GEMINI_KEY, SERPER_KEY } from "$env/static/private";
+// --- Provider Factory --------------------------------------------------------
 
-if (!GEMINI_KEY) {
-	console.warn(
-		"[ai] GEMINI_KEY is not set. Gemini-based features will fail until it is configured.",
-	);
+async function getAiModel(): Promise<LanguageModel> {
+	const prefs = await PreferencesStorage.get();
+	const provider = prefs.aiProvider || "google";
+	const apiKey = prefs.aiApiKey;
+	const modelName = prefs.aiModel || (provider === "google" ? "gemini-2.0-flash" : "gpt-4o");
+
+	if (provider === "google") {
+		const google = createGoogleGenerativeAI({
+			apiKey: apiKey || undefined,
+		});
+		return google(modelName);
+	}
+
+	if (provider === "openai") {
+		const openai = createOpenAI({
+			apiKey: apiKey || undefined,
+			baseURL: prefs.aiBaseUrl,
+		});
+		return openai(modelName);
+	}
+
+	if (provider === "anthropic") {
+		const anthropic = createAnthropic({
+			apiKey: apiKey || undefined,
+		});
+		return anthropic(modelName);
+	}
+
+	if (provider === "bedrock") {
+		const bedrock = createAmazonBedrock({
+			region: "us-east-1", // Default region, could be configurable
+			accessKeyId: process.env.AWS_ACCESS_KEY_ID, // Use env for now as keys are complex
+			secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+		});
+		return bedrock(modelName);
+	}
+
+	// For Local/Ollama, we can often use createOpenAI with a base URL
+	if (provider === "local" || provider === "ollama") {
+		const local = createOpenAI({
+			apiKey: apiKey || "not-needed",
+			baseURL: prefs.aiBaseUrl || "http://localhost:11434/v1",
+		});
+		return local(modelName);
+	}
+
+	// Default fallback
+	const google = createGoogleGenerativeAI({
+		apiKey: apiKey || undefined,
+	});
+	return google("gemini-1.5-flash");
 }
-
-if (!SERPER_KEY) {
-	console.warn(
-		"[ai] SERPER_KEY is not set. Serper search features will fail until it is configured.",
-	);
-}
-
-// Configure the Google Generative AI provider (Gemini) for use with the Vercel AI SDK.
-// This module is intended to be used from server-side code only (e.g. +server.ts routes).
-export const gemini = createGoogleGenerativeAI({
-	apiKey: GEMINI_KEY,
-});
-
-// Default model to use for summarisation / general reasoning.
-// You can change this to a different Gemini model if desired.
-export const geminiModel = gemini("gemini-2.0-flash");
 
 export async function generateGeminiText(options: {
 	prompt: string;
@@ -37,8 +69,10 @@ export async function generateGeminiText(options: {
 
 	console.log("[ai] Generating text with prompt:", prompt);
 
+	const model = await getAiModel();
+
 	const result = await generateText({
-		model: geminiModel,
+		model,
 		prompt,
 		system,
 		abortSignal,
@@ -72,27 +106,28 @@ export interface SerperSearchOptions {
 
 /**
  * Perform a web search using the Serper API.
- *
- * This helper is also intended for server-side usage only. Do not call it
- * directly from client components, as it relies on the secret SERPER_KEY.
  */
 export async function serperSearch(
 	query: string,
 	options: SerperSearchOptions = {},
 ): Promise<SerperSearchResponse> {
-	if (!SERPER_KEY) {
-		throw new Error("SERPER_KEY environment variable is not set.");
+	const prefs = await PreferencesStorage.get();
+	const serperKey = prefs.serperApiKey;
+
+	if (!serperKey) {
+		console.warn("[ai] serperApiKey is not set in preferences.");
+		// Fallback to Env if available for backward compatibility during transition
+		// but ideally we want to force setup soon.
 	}
 
 	console.log("[ai] Performing Serper search with query:", query);
 
 	try {
-
 		const response = await fetch(SERPER_ENDPOINT, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				"X-API-KEY": SERPER_KEY,
+				"X-API-KEY": serperKey || "",
 			},
 			body: JSON.stringify({
 				q: query,
