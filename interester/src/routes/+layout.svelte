@@ -4,6 +4,8 @@
   import { onMount } from "svelte";
   import { startScheduler } from "$lib/scheduler";
   import Toast from "$lib/components/Toast.svelte";
+  import SetupModal from "$lib/components/SetupModal.svelte";
+  import type { UserPreferences } from "$lib/types";
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: "🏠" },
@@ -12,7 +14,43 @@
     { href: "/settings", label: "Settings", icon: "⚙️" },
   ];
 
+  let showSetup = $state(false);
+
+  async function checkSetup() {
+    try {
+      const response = await fetch("/api/preferences");
+      const result = await response.json();
+      if (result.success) {
+        const prefs: UserPreferences = result.data;
+        if (!prefs.aiConfigured) {
+          showSetup = true;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to check setup:", e);
+    }
+  }
+
+  async function handleSaveSetup(updates: Partial<UserPreferences>) {
+    try {
+      const response = await fetch("/api/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      const result = await response.json();
+      if (result.success) {
+        showSetup = false;
+        // Optionally reload or notify components
+      }
+    } catch (e) {
+      console.error("Failed to save setup:", e);
+      throw e;
+    }
+  }
+
   onMount(() => {
+    checkSetup();
     // Start scheduler
     let stopScheduler: () => void;
     startScheduler().then((stop) => {
@@ -50,6 +88,7 @@
     <slot />
   </main>
   <Toast />
+  <SetupModal bind:isOpen={showSetup} onSave={handleSaveSetup} />
 </div>
 
 <style>

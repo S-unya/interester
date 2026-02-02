@@ -242,6 +242,71 @@
           />
         </div>
       </section>
+
+      <section class="settings-section">
+        <h2>API Configuration</h2>
+        <p class="section-desc">Manage your Search and AI provider settings.</p>
+
+        <div class="form-group">
+          <label for="serper-key">Serper API Key</label>
+          <input
+            id="serper-key"
+            type="password"
+            bind:value={preferences.serperApiKey}
+            onchange={savePreferences}
+            placeholder="Enter Serper key..."
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="ai-provider">AI Provider</label>
+          <select
+            id="ai-provider"
+            bind:value={preferences.aiProvider}
+            onchange={savePreferences}
+          >
+            <option value="google">Google (Gemini)</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="bedrock">AWS Bedrock</option>
+            <option value="ollama">Ollama (Local)</option>
+            <option value="local">Other Local API</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="ai-key">AI API Key</label>
+          <input
+            id="ai-key"
+            type="password"
+            bind:value={preferences.aiApiKey}
+            onchange={savePreferences}
+            placeholder="Enter AI key..."
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="ai-url">Base URL (For Local/OpenAI)</label>
+          <input
+            id="ai-url"
+            type="text"
+            bind:value={preferences.aiBaseUrl}
+            onchange={savePreferences}
+            placeholder="e.g. http://localhost:11434/v1"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="ai-model">Default Model</label>
+          <input
+            id="ai-model"
+            type="text"
+            bind:value={preferences.aiModel}
+            onchange={savePreferences}
+            placeholder="e.g. gemini-1.5-flash, gpt-4o"
+          />
+        </div>
+      </section>
     </div>
   {/if}
 </div>

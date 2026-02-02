@@ -11,6 +11,9 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 	defaultContentTypes: ["news", "articles"],
 	maxResultsPerSearch: 10,
 	enableNotifications: false,
+	aiProvider: "google",
+	aiModel: "gemini-1.5-flash",
+	aiConfigured: false,
 };
 
 export const PreferencesStorage = {

@@ -130,7 +130,23 @@ export interface UserPreferences {
 	defaultResultRetentionDays?: number;
 
 	globalIgnoreRules?: IgnoreRule[];
+
+	// API and Model Configuration
+	serperApiKey?: string;
+	aiProvider?: AiProvider;
+	aiApiKey?: string;
+	aiBaseUrl?: string; // for local/ollama
+	aiModel?: string;
+	aiConfigured?: boolean;
 }
+
+export type AiProvider =
+	| "google"
+	| "openai"
+	| "anthropic"
+	| "bedrock"
+	| "ollama"
+	| "local";
 
 /**
  * User-authored note attached to a formatted result.
