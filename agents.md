@@ -12,6 +12,6 @@ A personalized content monitoring system that allows users to register interests
 ## Progressive Disclosure
 For detailed instructions on specific areas, refer to the following documents:
 
-- [Coding Standards](/interester/docs/agents/coding-standards.md) (TypeScript & HTML/Accessibility)
-- [Styling Guidelines](/interester/docs/agents/styling.md) (CSS & Design Tokens)
-- [Testing Patterns](/interester/docs/agents/testing.md) (Vitest & Testing Library)
+- [Coding Standards](/docs/agents/coding-standards.md) (TypeScript & HTML/Accessibility)
+- [Styling Guidelines](/docs/agents/styling.md) (CSS & Design Tokens)
+- [Testing Patterns](/docs/agents/testing.md) (Vitest & Testing Library)
