@@ -6,6 +6,7 @@
   import Toast from "$lib/components/Toast.svelte";
   import SetupModal from "$lib/components/SetupModal.svelte";
   import type { UserPreferences } from "$lib/types";
+  import { PreferencesStorage, initializeStorage } from "$lib/storage";
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: "🏠" },
@@ -18,13 +19,10 @@
 
   async function checkSetup() {
     try {
-      const response = await fetch("/api/preferences");
-      const result = await response.json();
-      if (result.success) {
-        const prefs: UserPreferences = result.data;
-        if (!prefs.aiConfigured) {
-          showSetup = true;
-        }
+      await initializeStorage();
+      const prefs = await PreferencesStorage.get();
+      if (!prefs.aiConfigured) {
+        showSetup = true;
       }
     } catch (e) {
       console.error("Failed to check setup:", e);
@@ -33,15 +31,10 @@
 
   async function handleSaveSetup(updates: Partial<UserPreferences>) {
     try {
-      const response = await fetch("/api/preferences", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
-      const result = await response.json();
-      if (result.success) {
+      await initializeStorage();
+      const updated = await PreferencesStorage.update(updates);
+      if (updated.aiConfigured) {
         showSetup = false;
-        // Optionally reload or notify components
       }
     } catch (e) {
       console.error("Failed to save setup:", e);

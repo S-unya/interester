@@ -53,7 +53,7 @@
 
 <Dialog.Root bind:open={isOpen}>
     <Dialog.Portal>
-        <div transition:fade={{ duration: 200 }} class="modal-overlay"></div>
+        <Dialog.Overlay class="modal-overlay" />
         <div class="modal-container">
             <Dialog.Content class="modal-content">
                 <div
@@ -66,7 +66,6 @@
                     <Dialog.Description class="modal-description">
                         Let's get you set up with your search and AI keys.
                     </Dialog.Description>
-
                     <div class="setup-steps">
                         {#if step === 1}
                             <div class="step-content" transition:fade>
@@ -204,6 +203,15 @@
         z-index: 50;
         background-color: rgba(0, 0, 0, 0.4);
         backdrop-filter: blur(4px);
+        transition: opacity 200ms ease;
+    }
+
+    .modal-overlay[data-state="open"] {
+        opacity: 1;
+    }
+
+    .modal-overlay[data-state="closed"] {
+        opacity: 0;
     }
 
     .modal-container {

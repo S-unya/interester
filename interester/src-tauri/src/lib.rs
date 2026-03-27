@@ -393,10 +393,28 @@ pub fn run() {
             {
                 let quit_menu_i = MenuItem::with_id(app, "quit", "Quit Interester", true, None::<&str>)?;
                 let show_menu_i = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
+                
+                // Add Edit menu for keyboard shortcuts on macOS
+                let edit_menu = Submenu::with_items(
+                    app,
+                    "Edit",
+                    true,
+                    &[
+                        &MenuItem::with_id(app, "undo", "Undo", true, Some("CmdOrCtrl+Z"))?,
+                        &MenuItem::with_id(app, "redo", "Redo", true, Some("CmdOrCtrl+Shift+Z"))?,
+                        &tauri::menu::PredefinedMenuItem::separator(app)?,
+                        &MenuItem::with_id(app, "cut", "Cut", true, Some("CmdOrCtrl+X"))?,
+                        &MenuItem::with_id(app, "copy", "Copy", true, Some("CmdOrCtrl+C"))?,
+                        &MenuItem::with_id(app, "paste", "Paste", true, Some("CmdOrCtrl+V"))?,
+                        &MenuItem::with_id(app, "selectall", "Select All", true, Some("CmdOrCtrl+A"))?,
+                    ],
+                ).map_err(|e| e.to_string())?;
+
                 let app_menu = Menu::with_items(app, &[
-                    &Submenu::with_items(app, "App", true, &[&show_menu_i, &quit_menu_i])?
-                ])?;
-                app.set_menu(app_menu)?;
+                    &Submenu::with_items(app, "App", true, &[&show_menu_i, &quit_menu_i]).map_err(|e| e.to_string())?,
+                    &edit_menu,
+                ]).map_err(|e| e.to_string())?;
+                app.set_menu(app_menu).map_err(|e| e.to_string())?;
                 
                 app.on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
