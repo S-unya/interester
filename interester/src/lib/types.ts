@@ -37,6 +37,7 @@ export interface Interest {
 	description?: string;
 	searchTerms: string[];
 	monitorUrls?: string[];
+	contentType?: ContentType;
 	active: boolean;
 	createdAt: string;
 	updatedAt: string;
@@ -68,8 +69,6 @@ export interface FormattedResult {
 	id: string;
 	interestId: string;
 	searchId: string;
-	formattedHtml: string;
-	formattedText: string;
 	summary: string;
 	keyPoints: string[];
 	sources: {
@@ -77,10 +76,11 @@ export interface FormattedResult {
 		url: string;
 		date?: string;
 	}[];
+	items: DiscreteItem[];
 	generatedAt: string;
 
-	// Lifecycle and ignore metadata (optional for backwards compatibility)
-	status?: "unread" | "read" | "archived";
+	// Lifecycle and ignore metadata
+	status: "unread" | "read" | "archived";
 	readAt?: string;
 	archivedAt?: string;
 	ignored?: boolean;
@@ -88,7 +88,6 @@ export interface FormattedResult {
 	ignoredReason?: string;
 	ignoredByRuleId?: string;
 	pinned?: boolean;
-	items?: DiscreteItem[];
 }
 
 export type ItemType = "news" | "event" | "resource" | "opinion" | "general";
@@ -102,6 +101,7 @@ export interface DiscreteItem {
 	date?: string; // ISO string or human readable
 	location?: string; // For events
 	source?: string;
+	imageUrl?: string;
 }
 
 export interface SearchExecution {
@@ -117,11 +117,11 @@ export interface SearchExecution {
 export interface UserPreferences {
 	notificationEmail?: string;
 	notificationFrequency?:
-	| "immediate"
-	| "daily"
-	| "weekly"
-	| "monthly"
-	| "yearly";
+		| "immediate"
+		| "daily"
+		| "weekly"
+		| "monthly"
+		| "yearly";
 	defaultContentTypes: ContentType[];
 	maxResultsPerSearch: number;
 	enableNotifications: boolean;
@@ -131,13 +131,14 @@ export interface UserPreferences {
 
 	globalIgnoreRules?: IgnoreRule[];
 
-	// API and Model Configuration
-	serperApiKey?: string;
+	// AI Model Configuration (non-secret — keys are stored in OS keychain via SecretStorage)
 	aiProvider?: AiProvider;
-	aiApiKey?: string;
 	aiBaseUrl?: string; // for local/ollama
 	aiModel?: string;
 	aiConfigured?: boolean;
+
+	// Navigation state
+	lastActiveInterestId?: string;
 }
 
 export type AiProvider =

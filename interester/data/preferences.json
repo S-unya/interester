@@ -1,5 +1,15 @@
 {
-  "defaultContentTypes": ["news", "articles"],
+  "defaultContentTypes": [
+    "news",
+    "articles",
+    "events"
+  ],
   "maxResultsPerSearch": 10,
-  "enableNotifications": false
+  "enableNotifications": true,
+  "serperApiKey": "",
+  "aiProvider": "google",
+  "aiApiKey": "",
+  "aiBaseUrl": "",
+  "aiModel": "gemini-2.0-flash",
+  "aiConfigured": true
 }

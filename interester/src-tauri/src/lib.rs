@@ -1,3 +1,4 @@
+use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,7 +11,37 @@ use tauri::{
 use tauri_plugin_store::StoreBuilder;
 use tauri_plugin_notification::NotificationExt;
 
+const KEYCHAIN_SERVICE: &str = "com.sunya.interester";
+
 static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
+
+// ── Keychain commands ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn get_secret(key: String) -> Result<Option<String>, String> {
+    let entry = Entry::new(KEYCHAIN_SERVICE, &key).map_err(|e| e.to_string())?;
+    match entry.get_password() {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+fn set_secret(key: String, value: String) -> Result<(), String> {
+    let entry = Entry::new(KEYCHAIN_SERVICE, &key).map_err(|e| e.to_string())?;
+    entry.set_password(&value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_secret(key: String) -> Result<(), String> {
+    let entry = Entry::new(KEYCHAIN_SERVICE, &key).map_err(|e| e.to_string())?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()), // idempotent
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Interest {
@@ -124,8 +155,7 @@ fn start_scheduler<R: Runtime>(app_handle: tauri::AppHandle<R>) {
     });
 }
 
-async fn generate_gemini_text(prompt: &str, system: &str) -> Result<String, String> {
-    let api_key = std::env::var("GEMINI_KEY").map_err(|_| "GEMINI_KEY not set")?;
+async fn generate_gemini_text(prompt: &str, system: &str, api_key: &str) -> Result<String, String> {
     let client = reqwest::Client::new();
     let url = format!("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}", api_key);
 
@@ -158,8 +188,7 @@ async fn generate_gemini_text(prompt: &str, system: &str) -> Result<String, Stri
     Ok(text.to_string())
 }
 
-async fn serper_search(query: &str) -> Result<Vec<serde_json::Value>, String> {
-    let api_key = std::env::var("SERPER_KEY").map_err(|_| "SERPER_KEY not set")?;
+async fn serper_search(query: &str, api_key: &str) -> Result<Vec<serde_json::Value>, String> {
     let client = reqwest::Client::new();
     let url = "https://google.serper.dev/search";
 
@@ -206,6 +235,23 @@ fn extract_json(raw: &str) -> String {
 async fn run_search_scan(interest: Interest) -> Result<FormattedResult, String> {
     println!("[Rust Command] Running search scan for: {}", interest.name);
 
+    // Read keys from OS keychain — never from env vars or IPC parameters
+    let ai_key = Entry::new(KEYCHAIN_SERVICE, "ai_api_key")
+        .map_err(|e| e.to_string())?
+        .get_password()
+        .map_err(|e| match e {
+            keyring::Error::NoEntry => "AI API key not configured. Please add it in Settings.".to_string(),
+            _ => format!("Failed to read AI API key from keychain: {}", e),
+        })?;
+
+    let serper_key = Entry::new(KEYCHAIN_SERVICE, "serper_api_key")
+        .map_err(|e| e.to_string())?
+        .get_password()
+        .map_err(|e| match e {
+            keyring::Error::NoEntry => "Serper API key not configured. Please add it in Settings.".to_string(),
+            _ => format!("Failed to read Serper API key from keychain: {}", e),
+        })?;
+
     let prompts_json = include_str!("../../src/lib/prompts.json");
     let prompts: serde_json::Value = serde_json::from_str(prompts_json).map_err(|e| e.to_string())?;
 
@@ -220,7 +266,7 @@ async fn run_search_scan(interest: Interest) -> Result<FormattedResult, String> 
         .replace("{urls}", &interest.monitor_urls.as_ref().map(|u| u.join(", ")).unwrap_or_else(|| "N/A".to_string()))
         .replace("{date}", &chrono::Utc::now().to_rfc3339());
     
-    let queries_raw = generate_gemini_text(&query_prompt, query_system).await?;
+    let queries_raw = generate_gemini_text(&query_prompt, query_system, &ai_key).await?;
     println!("[Rust Command] Raw Queries response: {}", queries_raw);
     let clean_queries = extract_json(&queries_raw);
     let queries: Vec<String> = serde_json::from_str(&clean_queries).unwrap_or_else(|e| {
@@ -233,7 +279,7 @@ async fn run_search_scan(interest: Interest) -> Result<FormattedResult, String> 
     let mut all_raw = Vec::new();
     for q in queries {
         println!("[Rust Command] Searching for: {}", q);
-        if let Ok(results) = serper_search(&q).await {
+        if let Ok(results) = serper_search(&q, &serper_key).await {
             println!("[Rust Command] Found {} results for query.", results.len());
             all_raw.extend(results);
         }
@@ -270,7 +316,7 @@ async fn run_search_scan(interest: Interest) -> Result<FormattedResult, String> 
         .replace("{description}", interest.description.as_deref().unwrap_or("N/A"))
         .replace("{results}", &results_context);
 
-    let summary_raw = generate_gemini_text(&summary_prompt, summary_system).await?;
+    let summary_raw = generate_gemini_text(&summary_prompt, summary_system, &ai_key).await?;
     println!("[Rust Command] Raw Summary response: {}", summary_raw);
     let clean_summary = extract_json(&summary_raw);
     let data: serde_json::Value = serde_json::from_str(&clean_summary).map_err(|e| {
@@ -327,24 +373,6 @@ fn send_background_notification<R: Runtime>(app: &tauri::AppHandle<R>) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Explicitly load .env from root if we are in src-tauri
-    if let Err(e) = dotenvy::from_path("../.env") {
-        println!("[Rust] Warning: Failed to load .env from ../.env: {}. Trying default...", e);
-        let _ = dotenvy::dotenv();
-    }
-
-    if std::env::var("GEMINI_KEY").is_ok() {
-        println!("[Rust] GEMINI_KEY is present.");
-    } else {
-        println!("[Rust] ERROR: GEMINI_KEY is missing from environment.");
-    }
-    
-    if std::env::var("SERPER_KEY").is_ok() {
-        println!("[Rust] SERPER_KEY is present.");
-    } else {
-        println!("[Rust] ERROR: SERPER_KEY is missing from environment.");
-    }
-
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
@@ -445,7 +473,7 @@ pub fn run() {
         });
 
     builder
-        .invoke_handler(tauri::generate_handler![greet, run_search_scan])
+        .invoke_handler(tauri::generate_handler![greet, run_search_scan, get_secret, set_secret, delete_secret])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {

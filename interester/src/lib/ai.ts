@@ -1,7 +1,7 @@
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { generateText, type LanguageModel } from "ai";
 import { PreferencesStorage } from "./storage/preferences";
 
@@ -11,7 +11,8 @@ async function getAiModel(): Promise<LanguageModel> {
 	const prefs = await PreferencesStorage.get();
 	const provider = prefs.aiProvider || "google";
 	const apiKey = prefs.aiApiKey;
-	const modelName = prefs.aiModel || (provider === "google" ? "gemini-2.0-flash" : "gpt-4o");
+	const modelName =
+		prefs.aiModel || (provider === "google" ? "gemini-2.0-flash" : "gpt-4o");
 
 	if (provider === "google") {
 		const google = createGoogleGenerativeAI({
@@ -102,6 +103,7 @@ export interface SerperSearchOptions {
 	num?: number;
 	gl?: string;
 	hl?: string;
+	tbs?: string;
 }
 
 /**
@@ -134,6 +136,7 @@ export async function serperSearch(
 				num: options.num ?? 10,
 				gl: options.gl ?? "us",
 				hl: options.hl ?? "en",
+				...(options.tbs ? { tbs: options.tbs } : {}),
 			}),
 		});
 

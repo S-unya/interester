@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "name": "Chen style taiji quan seminars",
+    "description": "I am interested in attending upcoming seminars by the Chen style masters in the UK and Europe. List only upcoming events.",
+    "searchTerms": [
+      "Chen Bing",
+      "Chen ZiQiang",
+      "Chen YingJun",
+      "Chen XiaoWang"
+    ],
+    "contentTypes": [
+      "general"
+    ],
+    "active": true,
+    "id": "d51b8e27-ba55-49a3-8249-e3eaef138e49",
+    "createdAt": "2025-12-12T14:57:11.503Z",
+    "updatedAt": "2026-01-14T13:31:34.662Z",
+    "scheduleFrequency": "manual",
+    "lastRanAt": "2026-01-14T13:31:34.662Z"
+  },
+  {
+    "name": "Pushing hands & Shuai jiao events",
+    "description": "Taiji (tai chi) pushing hands and Shaui jiao events in the UK",
+    "searchTerms": [],
+    "scheduleFrequency": "manual",
+    "active": true,
+    "id": "e4a6532d-d3fb-4c3b-987f-29e9fb218ddb",
+    "createdAt": "2026-01-08T16:16:22.831Z",
+    "updatedAt": "2026-01-09T13:12:40.664Z",
+    "lastRanAt": "2026-01-09T13:12:40.664Z"
+  }
+]
