@@ -97,13 +97,4 @@ export class TauriStoreAdapter implements StorageAdapter {
 			return [];
 		}
 	}
-
-	/**
-	 * Clear all data from the store
-	 */
-	async clear(): Promise<void> {
-		await this.ensureInitialized();
-		await this.store.clear();
-		await this.store.save();
-	}
 }

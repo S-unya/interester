@@ -51,20 +51,6 @@ export interface Interest {
 	resultRetentionDays?: number;
 }
 
-export interface SearchResult {
-	id: string;
-	interestId: string;
-	url: string;
-	title: string;
-	snippet: string;
-	content?: string;
-	source: string;
-	publishedDate?: string;
-	fetchedAt: string;
-	relevanceScore?: number;
-	contentType?: ContentType;
-}
-
 export interface FormattedResult {
 	id: string;
 	interestId: string;
@@ -102,16 +88,6 @@ export interface DiscreteItem {
 	location?: string; // For events
 	source?: string;
 	imageUrl?: string;
-}
-
-export interface SearchExecution {
-	id: string;
-	interestId: string;
-	status: "pending" | "running" | "completed" | "failed";
-	startedAt: string;
-	completedAt?: string;
-	resultCount: number;
-	error?: string;
 }
 
 export interface UserPreferences {

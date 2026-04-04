@@ -3,6 +3,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, type LanguageModel } from "ai";
+import { SecretStorage } from "./secret-storage";
 import { PreferencesStorage } from "./storage/preferences";
 
 // --- Provider Factory --------------------------------------------------------
@@ -10,7 +11,7 @@ import { PreferencesStorage } from "./storage/preferences";
 async function getAiModel(): Promise<LanguageModel> {
 	const prefs = await PreferencesStorage.get();
 	const provider = prefs.aiProvider || "google";
-	const apiKey = prefs.aiApiKey;
+	const apiKey = await SecretStorage.getSecret("ai_api_key");
 	const modelName =
 		prefs.aiModel || (provider === "google" ? "gemini-2.0-flash" : "gpt-4o");
 
@@ -113,13 +114,10 @@ export async function serperSearch(
 	query: string,
 	options: SerperSearchOptions = {},
 ): Promise<SerperSearchResponse> {
-	const prefs = await PreferencesStorage.get();
-	const serperKey = prefs.serperApiKey;
+	const serperKey = await SecretStorage.getSecret("serper_api_key");
 
 	if (!serperKey) {
-		console.warn("[ai] serperApiKey is not set in preferences.");
-		// Fallback to Env if available for backward compatibility during transition
-		// but ideally we want to force setup soon.
+		console.warn("[ai] serper_api_key is not set in SecretStorage.");
 	}
 
 	console.log("[ai] Performing Serper search with query:", query);

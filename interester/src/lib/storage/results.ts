@@ -55,6 +55,7 @@ export const ResultStorage = {
 
 	/**
 	 * Mark a single result as unread and persist the change.
+	 * Forward scaffolding — not yet wired to UI (planned: unread toggle in results pane).
 	 */
 	async markAsUnread(
 		interestId: string,
@@ -76,6 +77,7 @@ export const ResultStorage = {
 
 	/**
 	 * Archive a single result and persist the change.
+	 * Forward scaffolding — not yet wired to UI (planned: archive action in results pane).
 	 */
 	async archiveResult(
 		interestId: string,
@@ -98,6 +100,7 @@ export const ResultStorage = {
 
 	/**
 	 * Permanently delete a single result from storage.
+	 * Forward scaffolding — not yet wired to UI (planned: delete action in results pane).
 	 */
 	async deleteResult(interestId: string, resultId: string): Promise<boolean> {
 		const results = await this.getByInterestId(interestId);
@@ -110,6 +113,7 @@ export const ResultStorage = {
 
 	/**
 	 * Toggle the pinned status of a result.
+	 * Forward scaffolding — not yet wired to UI (planned: pin/unpin in results pane).
 	 */
 	async togglePin(
 		interestId: string,

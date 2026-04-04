@@ -4,36 +4,10 @@ import {
 	serperSearch,
 } from "$lib/ai";
 import prompts from "$lib/prompts.json";
-import { InterestStorage, initializeStorage } from "$lib/storage";
-import { ResultStorage } from "$lib/storage/results";
 import type { FormattedResult, Interest } from "$lib/types";
 import { generateId } from "$lib/utils";
 
 export const Scanner = {
-	/**
-	 * Run a full scan for a given interest (Legacy method that handles storage):
-	 * 1. Load interest from storage
-	 * 2. Perform scan
-	 * 3. Save results to storage
-	 */
-	async runInterestScan(interestId: string): Promise<FormattedResult> {
-		await initializeStorage();
-		const interest = await InterestStorage.getById(interestId);
-
-		if (!interest) {
-			throw new Error(`Interest with ID ${interestId} not found`);
-		}
-
-		const formatted = await this.performScan(interest);
-
-		// 4. Save (Server-side storage)
-		const existing = await ResultStorage.getByInterestId(interestId);
-		const newResultsList = [formatted, ...existing];
-		await ResultStorage.save(interestId, newResultsList);
-
-		return formatted;
-	},
-
 	/**
 	 * Perform the actual AI scan logic without storage side effects.
 	 * Useful for stateless API routes.

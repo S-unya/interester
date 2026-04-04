@@ -34,9 +34,4 @@ export const PreferencesStorage = {
 		await this.save(updated);
 		return updated;
 	},
-
-	async reset(): Promise<UserPreferences> {
-		await this.save(DEFAULT_PREFERENCES);
-		return DEFAULT_PREFERENCES;
-	},
 };

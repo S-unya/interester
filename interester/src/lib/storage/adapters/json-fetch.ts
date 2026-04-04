@@ -9,7 +9,7 @@ import type { StorageAdapter } from "../adapter";
 export class JsonFetchAdapter implements StorageAdapter {
 	private cache: Map<string, unknown> = new Map();
 
-	constructor() { }
+	constructor() {}
 
 	async read<T>(key: string): Promise<T | null> {
 		try {
@@ -109,12 +109,5 @@ export class JsonFetchAdapter implements StorageAdapter {
 			console.error("Failed to list keys:", error);
 			return [];
 		}
-	}
-
-	/**
-	 * Clear the internal cache
-	 */
-	clearCache(): void {
-		this.cache.clear();
 	}
 }
